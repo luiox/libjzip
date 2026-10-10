@@ -1,0 +1,20 @@
+# 构建产物
+build/
+.xmake/
+compile_commands.json
+
+# 编译中间物
+*.obj
+*.o
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
