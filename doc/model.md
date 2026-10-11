@@ -479,7 +479,7 @@ class ZipParseException : public std::runtime_error {
 ## 10. C++ 编码约定
 
 - 命名空间: `jzip`
-- 无 RTTI, 使用 `typed::cast<T>()`
+- 无 RTTI：部件类型经虚函数 `type()` 返回的 `PartType` 枚举区分（`zip_type_traits.hpp` 为 `ca::core::tag_cast` 提供 `TypeOf` 特化备用）
 - 异常: `ZipParseException` 代替 `IOException`，携带 `offset()` 定位错误
 - `MemorySegment` 构造: `MemorySegment(vector)` 或 `MemorySegment(ptr, size)`
 - `ZipArchive` 通过 `std::unique_ptr` 管理 `ZipPart` 生命周期；原始字节只读不复制（视图），只有 `decompress()` 产生新 `byte[]`
