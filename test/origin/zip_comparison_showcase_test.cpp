@@ -3,7 +3,9 @@
  * - test(String name) @Disabled parameterized with 32 samples
  * - handle(name, data) console output function
  *
- * DISABLED: demonstration only, no assertions.
+ * DISABLED: manual showcase only - no assertions, do not enable in CI.
+ * Mirrors Java class-level @Disabled("only used for demonstration purposes,
+ * and does not make any assertions").
  * LL-J-ZIP readers (jvm/std/naive) are fully mirrored.
  * ZipInputStream/ZipFile/FileSystem are Java stdlib, no C++ equivalent here.
  */
