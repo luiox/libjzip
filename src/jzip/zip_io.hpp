@@ -27,10 +27,6 @@ public:
     /// @param sink 可选结构异常 sink
     static ZipArchive readJvm(const MemorySegment& data, ZipAnomalySink* sink = nullptr);
 
-    /// @brief 读取 JVM 语义 ZIP（严格模式）。
-    /// @param data ZIP 数据
-    static ZipArchive readJvmStrict(const MemorySegment& data);
-
     /// @brief 读取文件路径。
     /// @param path 文件路径
     static ZipArchive readAdaptingIO(const std::string& path);

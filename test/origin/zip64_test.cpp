@@ -1,6 +1,6 @@
 #ifdef _MSC_VER
 #    pragma warning(push)
-#    pragma warning(disable : 4996)   // tmpnam/fopen: used for temp file in DISABLED test
+#    pragma warning(disable : 4996)   // tmpnam/fopen: 活跃测试（Zip64Tests）的临时文件用法
 #endif
 
 #include <gtest/gtest.h>

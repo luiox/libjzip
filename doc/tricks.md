@@ -301,7 +301,7 @@ libjzip 负责承载容器结构，以下分类/判定若由消费方自己做�
 ```markdown
 ## 容器 trick 记录：<项目名>
 
-> 分类法见 libs/libjzip/doc/tricks.md §3；本文只记本项目实际遇到的样本。
+> 分类法见 libjzip 的 doc/tricks.md §3；本文只记本项目实际遇到的样本。
 
 ### 遇到的 trick（引用分类）
 
@@ -315,7 +315,7 @@ libjzip 负责承载容器结构，以下分类/判定若由消费方自己做�
 
 约定：
 
-- **分类编号是全局唯一的事实来源**，放在 `libs/libjzip/doc/tricks.md`；子项目只引用、不复制定义。
+- **分类编号是全局唯一的事实来源**，放在 libjzip 的 `doc/tricks.md`（本文件）；子项目只引用、不复制定义。
 - 新增 trick 分类：先在 §3 追加一条（特征/识别/防御/写回影响），再在 §4 挂 libjzip 样本
   （若有），最后更新 §5 矩阵和 §2.2 总览表。
 - 子项目的样本清单放在子项目自己的 `doc/`，不塞进 libjzip；libjzip 只持有它自己的回归样本。
@@ -327,4 +327,4 @@ libjzip 负责承载容器结构，以下分类/判定若由消费方自己做�
 - [design.md](design.md)：分层架构、reader / writer / mapper 定位
 - [model.md](model.md)：对象模型、CEN↔LOC 双向链接
 - [algorithm.md](algorithm.md)：EOCD 验证链、扫描边界、DD 裁剪、ZIP64 算法
-- [../readme.md](../readme.md)：项目总览、常用入口、构建测试
+- [README.md](../README.md)：项目总览、常用入口、构建测试

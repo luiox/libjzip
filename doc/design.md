@@ -2,31 +2,33 @@
 
 ## 1. 定位
 
-`libjzip` 是面向 JVM 字节码场景的 ZIP/JAR 基础库，服务两类上层需求：
+`libjzip` 是面向 JVM 字节码场景的 ZIP/JAR 基础库，围绕两个抽象层级设计：
 
-- `jzip`：保留 ZIP 原始结构，行为对齐 LL-Java-Zip / JVM
-- `zip`：提供接近 `java.util.zip` 的简单读写接口
+- `jzip`（本仓 `src/jzip/`）：保留 ZIP 原始结构，行为对齐 LL-Java-Zip / JVM
+- `zip`（依赖包 libca 提供，`ca::zip`）：接近 `java.util.zip` 的简单读写接口
 
 这两层不是重复实现，而是不同抽象层级：
 
 - `jzip` 关心 `LOC / CEN / EOCD / data descriptor / ZIP64 / prefix junk`
 - `zip` 关心“按 entry 读写内容”
 
+`jzip` 的 `AdaptingZipReader` 直接委托 `ca::zip::ZipFile`，把结构化模型适配到
+简单接口语义（见 §8）。
+
 ## 2. 分层结构
 
 ```text
-libs/libjzip/src/
-├── jzip/
-│   ├── zip_model.hpp        ZIP 结构模型
-│   ├── zip_reader.hpp       结构化读取器
-│   ├── zip_writer.hpp       结构化写入器
-│   ├── zip_mapper.hpp       结构映射器
-│   └── zip_adapting_reader.hpp
-└── zip/
-    ├── zip_file.hpp         stdlib 风格随机访问读取
-    ├── zip_input_stream.hpp stdlib 风格流式读取
-    ├── zip_output_stream.hpp stdlib 风格写出
-    └── zip_entry.hpp        entry 元数据
+src/jzip/                     （本仓）
+├── zip_model.hpp             ZIP 结构模型
+├── zip_reader.hpp            结构化读取器
+├── zip_writer.hpp            结构化写入器
+├── zip_mapper.hpp            结构映射器
+└── zip_adapting_reader.hpp   委托 ca::zip 的适配读取器
+
+libca/zip/                    （依赖包 libca，版本锁见 xmake.lua）
+├── file.hpp                  stdlib 风格随机访问读取（ca::zip::ZipFile）
+├── entry.hpp                 entry 元数据
+└── ...                       流式读写等其余 stdlib 风格接口
 ```
 
 ## 3. 架构图
@@ -38,8 +40,7 @@ graph TD
     C --> D["jzip::ZipPartMapper"]
     D --> E["jzip::ZipWriter"]
 
-    A --> F["zip::ZipFile / zip::ZipInputStream"]
-    G["zip::ZipOutputStream"] --> H["ZIP 输出文件"]
+    A --> F["ca::zip::ZipFile（libca 依赖）"]
 
     C -. 适配/清洗 .-> F
 ```
@@ -137,19 +138,19 @@ graph TD
 2. mapper 做标准化或复制
 3. writer 写回
 
-## 8. `zip` 层：stdlib 风格封装
+## 8. `zip` 层：stdlib 风格封装（libca 提供）
 
-`zip` 层对标 `java.util.zip`，提供按 entry 的易用读写：
+本仓不含独立 `zip` 层：按 entry 的易用读写由依赖包 libca 的 `ca::zip` 提供
+（对标 `java.util.zip` 的 `ZipFile` 等接口，方法清单与签名直接查 libca 头文件，
+版本锁见根目录 `xmake.lua`）。
 
-- `zip::ZipFile`（`zip_file.hpp`）：随机访问读取
-- `zip::ZipInputStream`（`zip_input_stream.hpp`）：顺序流式读取，对标 `java.util.zip.ZipInputStream`，已修过 data descriptor 处理和空 stored entry 回读
-- `zip::ZipOutputStream`（`zip_output_stream.hpp`）：按 entry 顺序写
-
-各类型的方法清单与签名直接查对应头文件（或见 `../readme.md` 的入口速查表）。
+`jzip` 与该层的桥接点是 `AdaptingZipReader`（`zip_adapting_reader.hpp`）：
+委托 `ca::zip::ZipFile` 读取，把条目解压为 method=stored 的干净结构并入
+`jzip::ZipArchive` 模型；`ZipIO::readAdaptingIO` 是其便捷入口。
 
 ## 9. 文档导航
 
-- 想理解对象关系：看 `MODEL.md`
-- 想理解 EOCD / CEN / LOC / ZIP64 处理算法：看 `ALGORITHM.md`
-- 想理解容器 trick 分类法（仓库通用）与 libjzip 样本挂载：看 `TRICKS.md`
-- 想看项目总览、入口速查和选层建议：回到 `../readme.md`
+- 想理解对象关系：看 [model.md](model.md)
+- 想理解 EOCD / CEN / LOC / ZIP64 处理算法：看 [algorithm.md](algorithm.md)
+- 想理解容器 trick 分类法与 libjzip 样本挂载：看 [tricks.md](tricks.md)
+- 想看项目总览、构建测试：回到根目录 [README.md](../README.md)
