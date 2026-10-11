@@ -7,6 +7,11 @@
 
 #include "test_utils.hpp"
 
+// 手动演示用（manual showcase）：三种 reader 策略对同一样本的打印对比，无任何断言。
+// 对齐 Java 侧 ZipComparisonShowcaseTest 的类级
+// @Disabled("only used for demonstration purposes, and does not make any assertions")，
+// 保持 DISABLED，勿在 CI 启用；人工查看用 --gtest_also_run_disabled_tests。
+
 using namespace jzip;
 using namespace jzip::test;
 
@@ -20,9 +25,8 @@ TEST_P(ZipComparisonShowcaseTests, DISABLED_Test)
     const auto& name  = GetParam();
     const auto  path  = test_resource_path(name);
     const auto  bytes = read_file_bytes(path);
-    if (bytes.empty()) {
-        return;
-    }
+    // 演示测试也不例外：缺资源按失败处理，不做静默通过。
+    ASSERT_FALSE(bytes.empty()) << "missing test resource: " << name;
 
     {
         std::cout << "==== libjzip (jvm-strategy) ====" << std::endl;
