@@ -6,7 +6,7 @@
  * - Binary LE writing helpers
  * - CRC32 computation (via zlib)
  *
- * Used by Zip64Tests (DISABLED, pending Zip64Support).
+ * Used by Zip64Tests (Zip64Support 已落地，测试为启用状态).
  */
 
 #include <cstdint>

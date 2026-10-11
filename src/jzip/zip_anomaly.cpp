@@ -31,7 +31,8 @@ void emitAnomaly(ZipReadReport& report, ZipAnomalySink* sink, ZipAnomalyKind kin
 {
     report.add(ZipAnomaly{kind, offset, entry, detail});
     if (sink != nullptr) {
-        // 报告已持有副本；sink 拿到独立拷贝，避免别名。
+        // sink 收到的是报告内元素的 const 引用：后续 add 可能使引用失效，
+        // 需要持有请自行拷贝。
         sink->onAnomaly(report.anomalies().back());
     }
 }

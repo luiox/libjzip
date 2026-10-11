@@ -322,7 +322,9 @@ public:
 
     /// @brief 创建当前对象的深拷贝。
     /// 对标 Java LocalFileHeader.copy()，返回独立副本。
-    /// 注意：linkedDirectory 指针不复制，副本中为 nullptr。
+    /// 注意：linkedDirectory 指针不复制，副本中为 nullptr；
+    /// 对 JvmLocalFileHeader 派生对象调用会退化为基类副本（JVM 扫描边界
+    /// 等扩展状态不保留），需要保留 JVM 语义时不要走此拷贝。
     std::unique_ptr<LocalFileHeader> copy() const;
 
 private:

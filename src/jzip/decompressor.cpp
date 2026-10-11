@@ -101,14 +101,6 @@ std::vector<u8> DeflateDecompressor::decompress(const LocalFileHeader& header,
     }
 }
 
-void DeflateEntry::reset()
-{
-    state  = 0;
-    offset = 0;
-    inBuf.clear();
-    outBuf.clear();
-}
-
 UnsafeDeflateDecompressor::UnsafeDeflateDecompressor(size_t poolSize)
 {
     pool_.reserve(poolSize);
@@ -214,6 +206,11 @@ std::vector<u8> inflateRaw(const ca::u8* data, size_t size, size_t uncompressedS
 std::vector<u8> DeflateCompressor::compress(const std::vector<u8>& input)
 {
     if (input.empty()) return {};
+
+    // 与解压侧对称：zlib 的 avail_in/avail_out 是 uInt，超限静默截断会产生损坏输出
+    if (input.size() > static_cast<usize>(std::numeric_limits<uInt>::max())) {
+        throw ZipParseException("payload is too large for zlib api", 0);
+    }
 
     z_stream stream{};
     if (deflateInit2(

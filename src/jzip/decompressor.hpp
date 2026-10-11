@@ -53,17 +53,12 @@ public:
 
 std::vector<ca::u8> inflateRaw(const ca::u8* data, size_t size, size_t uncompressedSize);
 
-/// @brief 不安全的 Deflate 复用条目。
+/// @brief 复用条目：池化的 z_stream 包装。
+///
+/// 实际只持有 zs；池化复用走 inflateReset，无需额外缓冲/状态字段。
 struct DeflateEntry
 {
-    void*               zs{};
-    std::vector<ca::u8> inBuf;
-    std::vector<ca::u8> outBuf;
-    int                 state  = 0;
-    int                 offset = 0;
-
-    /// @brief 重置条目状态。
-    void reset();
+    void* zs{};
 };
 
 /// @brief 复用条目的 Deflate 解压缩器。
@@ -74,7 +69,8 @@ class UnsafeDeflateDecompressor : public Decompressor
 {
 public:
     /// @brief 构建解压缩器，预分配指定数量的条目。
-    /// @param poolSize 池大小（默认 8）
+    /// @param poolSize 池大小（默认 64；池耗尽时回退到非池化的
+    ///   DeflateDecompressor 现建流）
     explicit UnsafeDeflateDecompressor(size_t poolSize = 64);
 
     /// @brief 析构函数，释放池中所有 z_stream。
