@@ -89,7 +89,7 @@ xmake run libjzip_origintest
 
 | 依赖 | 来源 | 说明 |
 |------|------|------|
-| libca 0.0.15 | luiox-repo（git 直连包） | 运行依赖 core / zip 模块，测试另需 test 模块；版本锁固定，升级须显式换版 |
+| libca 0.0.16 | luiox-repo（git 直连包） | 运行依赖 core / zip 模块，测试另需 test 模块；版本锁固定，升级须显式换版 |
 | zlib | xrepo | deflate 压缩 / 解压 |
 | gtest / gmock | xrepo | 仅 `--with_tests=y` 时拉取 |
 

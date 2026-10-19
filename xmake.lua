@@ -2,7 +2,7 @@
 --
 -- 依赖：
 --   - libca（luiox-repo git 直连包）：core/zip 为运行依赖，test 为测试门面
---     依赖；版本锁固定 0.0.15，升级须显式换版。
+--     依赖；版本锁固定 0.0.16，升级须显式换版。
 --   - zlib（xrepo）。
 --   - gtest（xrepo，仅 --with_tests=y）。
 --
@@ -14,7 +14,7 @@
 set_languages("c99", "cxx17")
 add_rules("mode.debug", "mode.release")
 
-add_requires("libca 0.0.15", {configs = {modules = "core,zip,test"}})
+add_requires("libca 0.0.16", {configs = {modules = "core,zip,test"}})
 add_requires("zlib")
 
 option("with_tests")
