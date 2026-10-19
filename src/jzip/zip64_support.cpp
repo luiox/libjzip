@@ -7,6 +7,8 @@ namespace jzip {
 namespace {
 constexpr u64 kZip64LocatorLength   = 20;
 constexpr u64 kZip64RecordMinLength = 56;
+/// 传统 EOCD 之前需完整容纳 locator + 最小记录，低于该下限必无有效 ZIP64 结构
+constexpr u64 kZip64MinUpperBoundary = kZip64LocatorLength + kZip64RecordMinLength;
 constexpr u32 kZip64LocatorSig      = 0x07064b50u;
 constexpr u32 kZip64RecordSig       = 0x06064b50u;
 }   // namespace
@@ -17,10 +19,10 @@ std::optional<Zip64EndInfo> Zip64Support::tryReadZip64EndInfo(const MemorySegmen
 
     auto fileLen = data.byteSize();
 
-    // 合法 ZIP64 布局要求 locator(20) + 最小 zip64 记录(56) 都在传统 EOCD 之前；
-    // endOffset 不足 76 时必无有效结构。该早退同时保证下方
+    // 合法 ZIP64 布局要求 locator 与最小 zip64 记录都在传统 EOCD 之前：低于
+    // kZip64MinUpperBoundary 必无有效结构。该早退同时保证下方
     // endOffset - kZip64RecordMinLength 的减法不下溢、后续读取不越界。
-    if (endOffset < kZip64LocatorLength + kZip64RecordMinLength) return std::nullopt;
+    if (endOffset < kZip64MinUpperBoundary) return std::nullopt;
 
     usize locatorOffset = endOffset - kZip64LocatorLength;
     if (MemorySegmentUtil::readQuad(data, locatorOffset) != kZip64LocatorSig) return std::nullopt;
