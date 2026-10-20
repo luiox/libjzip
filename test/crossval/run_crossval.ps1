@@ -5,10 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$crossvalDir = $scriptDir
-$testDir = Split-Path -Parent $crossvalDir
-$libjzipDir = Split-Path -Parent $testDir
-$repoRoot = Split-Path -Parent (Split-Path -Parent $libjzipDir)
+$libjzipDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 
 Write-Host "=== libjzip crossval: C++ dump generation ===" -ForegroundColor Cyan
 

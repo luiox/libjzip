@@ -1,6 +1,6 @@
 # LL-Java-Zip 读写算法分析
 
-> libjzip 各 reader/writer/mapper 的算法流程。类关系与字段模型见 [MODEL.md](MODEL.md)。
+> libjzip 各 reader/writer/mapper 的算法流程。类关系与字段模型见 [model.md](model.md)。
 
 ---
 
@@ -434,7 +434,7 @@ flowchart LR
 2. **`hasDifferentValuesThanCentralDirectoryHeader()`**：逐字段比较 LOC 和 CEN，检测不一致
 3. **`adoptLinkedCentralDirectoryValues()`**：用 CEN 字段修复 LOC
 
-> 链接的字段语义与生命周期见 [MODEL.md](MODEL.md) §3.2。
+> 链接的字段语义与生命周期见 [model.md](model.md) §3.2。
 
 ---
 
