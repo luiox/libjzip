@@ -72,6 +72,8 @@ public:
 /// @brief 复制式映射器：返回每个部件的独立深拷贝，原部件由 mapArchive 释放。
 /// @note 深拷贝不保留 LocalFileHeader/CentralDirectoryFileHeader 的 link 关系；
 ///       JvmLocalFileHeader 会退化为基类副本（见 LocalFileHeader::copy()）。
+///       本映射器应位于映射链末端：若其后的 mapper 再建立 LOC/CEN 互链
+///       （如 CentralAdoptingMapper），链接会指向随后释放的原部件。
 class CopyingZipPartMapper final : public ZipPartMapper
 {
 public:
