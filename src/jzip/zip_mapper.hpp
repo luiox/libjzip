@@ -31,7 +31,8 @@ class DelegatingZipPartMapper : public ZipPartMapper
 {
 public:
     /// @brief 构造委派映射器。
-    /// @param delegate 被委派的映射器
+    /// @param delegate 被委派的映射器；本类只存指针，delegate 必须活得比本实例久
+    ///                 （临时对象仅在同一完整表达式内安全）。
     explicit DelegatingZipPartMapper(const ZipPartMapper& delegate)
         : delegate_(&delegate)
     {}
