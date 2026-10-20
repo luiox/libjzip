@@ -27,7 +27,9 @@ usize MemorySegment::byteSize() const
 // 返回子切片，共享同一所有权
 MemorySegment MemorySegment::asSlice(usize offset, usize length) const
 {
-    if (offset > size_ || length > size_ || offset + length > size_) {
+    // 先判 offset 再用减法：offset + length 在 offset 接近 usize 上限时回绕，
+    // 会放过越界切片（契约：越界必须抛，调用方依赖异常终止解析）
+    if (offset > size_ || length > size_ - offset) {
         throw std::out_of_range("MemorySegment slice out of range");
     }
 
@@ -48,7 +50,9 @@ u8 MemorySegment::get(u8, usize index) const
 
 u16 MemorySegment::get(u16, usize index) const
 {
-    if (index + 1 >= size_) {
+    // 宽度检查用减法避免 index + N 回绕：越界索引必须在此终止，
+    // 不能变成对 data_ 的任意偏移读取
+    if (size_ < 2 || index > size_ - 2) {
         throw std::out_of_range("MemorySegment index out of range");
     }
     return static_cast<u16>(data_[index]) | static_cast<u16>(data_[index + 1] << 8);
@@ -56,7 +60,7 @@ u16 MemorySegment::get(u16, usize index) const
 
 u32 MemorySegment::get(u32, usize index) const
 {
-    if (index + 3 >= size_) {
+    if (size_ < 4 || index > size_ - 4) {
         throw std::out_of_range("MemorySegment index out of range");
     }
     return static_cast<u32>(data_[index]) | static_cast<u32>(data_[index + 1] << 8) |
@@ -65,7 +69,7 @@ u32 MemorySegment::get(u32, usize index) const
 
 u64 MemorySegment::get(u64, usize index) const
 {
-    if (index + 7 >= size_) {
+    if (size_ < 8 || index > size_ - 8) {
         throw std::out_of_range("MemorySegment index out of range");
     }
     const u32 low  = get(u32{}, index);

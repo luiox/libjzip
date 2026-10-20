@@ -221,7 +221,9 @@ std::optional<UnixExtraTime> ExtraFieldParser::parse_unix_time(
 
 void AbstractZipFileHeader::read(const MemorySegment& data, usize offset)
 {
-    if (data.byteSize() < offset + kLocalFileHeaderMinSize) {
+    // 减法比较：offset + kMin 在 offset 接近上限时回绕，会放过越界头
+    if (data.byteSize() < kLocalFileHeaderMinSize ||
+        offset > data.byteSize() - kLocalFileHeaderMinSize) {
         throw ZipParseException("local file header truncated", offset);
     }
 
@@ -446,11 +448,16 @@ void LocalFileHeader::readFileData(const MemorySegment& data, usize headerOffset
                               static_cast<usize>(getFileNameLength()) +
                               static_cast<usize>(getExtraFieldLength());
 
-    const usize data_end = data_offset + static_cast<usize>(std::max<i64>(0, getCompressedSize()));
-    if (data_end > data.byteSize()) {
+    // 用减法比较并先钳住非正压缩大小：data_offset + compressed 在
+    // compressed 来自 ZIP64 字段时可能回绕，回绕后的 data_end 会通过越界检查
+    if (data_offset > data.byteSize()) {
         throw ZipParseException("local file data out of range", headerOffset);
     }
-
+    const auto compressed = static_cast<u64>(std::max<i64>(0, getCompressedSize()));
+    if (compressed > static_cast<u64>(data.byteSize() - data_offset)) {
+        throw ZipParseException("local file data out of range", headerOffset);
+    }
+    const usize data_end = data_offset + static_cast<usize>(compressed);
     fileData_ = data.asSlice(data_offset, data_end - data_offset).toByteArray();
 }
 
@@ -771,7 +778,8 @@ void JvmLocalFileHeader::adoptLinkedCentralDirectoryValues()
 // 从原始数据解析中央目录记录
 void CentralDirectoryFileHeader::read(const MemorySegment& data, usize offset)
 {
-    if (data.byteSize() < offset + kCentralDirectoryFileHeaderMinSize) {
+    if (data.byteSize() < kCentralDirectoryFileHeaderMinSize ||
+        offset > data.byteSize() - kCentralDirectoryFileHeaderMinSize) {
         throw ZipParseException("central directory header truncated", offset);
     }
 
@@ -1019,7 +1027,8 @@ std::unique_ptr<CentralDirectoryFileHeader> CentralDirectoryFileHeader::copy() c
 // 从原始数据解析 EOCD 记录
 void EndOfCentralDirectory::read(const MemorySegment& data, usize offset)
 {
-    if (data.byteSize() < offset + kEndOfCentralDirectoryMinSize) {
+    if (data.byteSize() < kEndOfCentralDirectoryMinSize ||
+        offset > data.byteSize() - kEndOfCentralDirectoryMinSize) {
         throw ZipParseException("EOCD truncated", offset);
     }
 

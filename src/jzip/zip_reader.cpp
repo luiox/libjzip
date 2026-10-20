@@ -35,6 +35,35 @@ u32 read_u32_le(const std::vector<u8>& bytes, usize offset)
            static_cast<u32>(bytes[offset + 2] << 16) | static_cast<u32>(bytes[offset + 3] << 24);
 }
 
+/// 把 CEN 的相对 LOC 偏移映射为文件绝对偏移。
+/// baseOffset 为负表示 EOCD 声明的 CEN 起点晚于实际位置，偏移空间自相矛盾，
+/// 任何映射都不可信，按不可映射处理（调用方记录异常并跳过）。
+/// @param baseOffset CEN 绝对起点减声明偏移
+/// @param relative CEN 记录的 relativeOffsetOfLocalHeader
+/// @param fileLength 文件总长度
+/// @param required 目标位置至少需要容纳的字节数
+/// @return 映射成功返回绝对偏移，否则返回 nullopt
+std::optional<usize> mapLocalOffset(std::ptrdiff_t baseOffset, u64 relative, usize fileLength,
+                                    usize required)
+{
+    if (baseOffset < 0) {
+        return std::nullopt;
+    }
+    const u64 base = static_cast<u64>(baseOffset);
+    if (relative > std::numeric_limits<u64>::max() - base) {
+        return std::nullopt;
+    }
+    const u64 absolute = base + relative;
+    if (absolute > static_cast<u64>(fileLength)) {
+        return std::nullopt;
+    }
+    const auto offset = static_cast<usize>(absolute);
+    if (fileLength - offset < required) {
+        return std::nullopt;
+    }
+    return offset;
+}
+
 // 当中央目录不可用时，从本地文件头反向推导中央目录记录
 void recover_central_from_local_headers(const std::vector<u8>& bytes, usize scan_end,
                                         ZipArchive& archive, ZipPartAllocator& allocator)
@@ -203,9 +232,18 @@ void ForwardScanZipReader::read(ZipArchive& archive, const MemorySegment& data)
     std::unordered_set<usize> used_offsets_set;
     usize                     min_local_offset = data_size;
     for (auto* dir : centrals) {
-        auto local_offset = static_cast<usize>(
-            resolved.baseOffset +
-            static_cast<std::ptrdiff_t>(Zip64Support::resolveLocalHeaderOffset(*dir)));
+        const auto relativeOffset = Zip64Support::resolveLocalHeaderOffset(*dir);
+        const auto mapped =
+            mapLocalOffset(resolved.baseOffset, relativeOffset, data_size, kLocalFileHeaderMinSize);
+        if (!mapped.has_value()) {
+            emit(archive, ZipAnomalyKind::LocalHeaderSignatureMiss, dir->offset(),
+                 dir->getFileName(),
+                 "CEN-resolved LOC offset outside archive bounds (base=" +
+                     std::to_string(resolved.baseOffset) +
+                     ", relative=" + std::to_string(relativeOffset) + ")");
+            continue;
+        }
+        const auto local_offset = *mapped;
 
         if (used_offsets_set.count(local_offset)) {
             emit(archive, ZipAnomalyKind::DuplicateLocalOffset, local_offset, dir->getFileName(),
@@ -214,9 +252,7 @@ void ForwardScanZipReader::read(ZipArchive& archive, const MemorySegment& data)
         }
         used_offsets_set.insert(local_offset);
 
-        // 对标 Java：offset 必须保证能容纳完整 LFH 最小尺寸（之前只检查 >= data_size 太宽松）
-        if (local_offset + kLocalFileHeaderMinSize > data_size ||
-            MemorySegmentUtil::readQuad(data, local_offset) != kLocalFileHeaderSignature) {
+        if (MemorySegmentUtil::readQuad(data, local_offset) != kLocalFileHeaderSignature) {
             emit(archive, ZipAnomalyKind::LocalHeaderSignatureMiss, local_offset,
                  dir->getFileName(), "no LOC signature at CEN-resolved offset");
             continue;
@@ -409,20 +445,20 @@ bool JvmZipReader::isValidEndHeader(const MemorySegment& data, usize endPos,
     const auto localOffsetRelative = MemorySegmentUtil::readQuad(data, centralDirectoryStart + 42);
     const auto baseOffset          = static_cast<std::ptrdiff_t>(centralDirectoryStart) -
                             static_cast<std::ptrdiff_t>(centralDirOffset);
-    const auto localOffset = baseOffset + static_cast<std::ptrdiff_t>(localOffsetRelative);
-
-    if (localOffset < 0 || static_cast<usize>(localOffset) + kLocalFileHeaderMinSize > fileLength) {
+    const auto mapped =
+        mapLocalOffset(baseOffset, localOffsetRelative, fileLength, kLocalFileHeaderMinSize);
+    if (!mapped.has_value()) {
         return false;
     }
+    const auto localOffset = *mapped;
 
-    if (MemorySegmentUtil::readQuad(data, static_cast<usize>(localOffset)) !=
-        kLocalFileHeaderSignature) {
+    if (MemorySegmentUtil::readQuad(data, localOffset) != kLocalFileHeaderSignature) {
         return false;
     }
 
     // 验证 CEN/LOC name_length 一致（CEN[+28] vs LOC[+26]）
     const auto cenNameLen = MemorySegmentUtil::readWord(data, centralDirectoryStart + 28);
-    const auto locNameLen = MemorySegmentUtil::readWord(data, static_cast<usize>(localOffset) + 26);
+    const auto locNameLen = MemorySegmentUtil::readWord(data, localOffset + 26);
 
     return cenNameLen == locNameLen;
 }
@@ -476,13 +512,11 @@ bool JvmZipReader::hasAnyLinkedLocalHeader(const MemorySegment& data, ZipArchive
 {
     const auto fileLength = data.byteSize();
     for (const auto* cen : zip.getCentralDirectories()) {
-        const auto resolvedOffset = Zip64Support::resolveLocalHeaderOffset(*cen);
-        const auto signedOffset =
-            static_cast<std::ptrdiff_t>(baseOffset) + static_cast<std::ptrdiff_t>(resolvedOffset);
-        if (signedOffset < 0) continue;
-        const auto offset = static_cast<usize>(signedOffset);
-        if (offset + kLocalFileHeaderMinSize <= fileLength &&
-            MemorySegmentUtil::readQuad(data, offset) == kLocalFileHeaderSignature) {
+        const auto mapped = mapLocalOffset(
+            baseOffset, Zip64Support::resolveLocalHeaderOffset(*cen), fileLength,
+            kLocalFileHeaderMinSize);
+        if (mapped.has_value() &&
+            MemorySegmentUtil::readQuad(data, *mapped) == kLocalFileHeaderSignature) {
             return true;
         }
     }
@@ -506,17 +540,19 @@ std::optional<usize> JvmZipReader::scanForLocalHeaderBaseOffset(const MemorySegm
     }
 
     // 从 EOCD 推导的 baseOffset 附近前向扫描 PK 前缀
-    const auto centralDirSize   = static_cast<usize>(end.getCentralDirectorySize());
-    const auto centralDirOffset = static_cast<usize>(end.getCentralDirectoryOffset());
+    const auto centralDirSize = static_cast<usize>(end.getCentralDirectorySize());
 
-    std::ptrdiff_t baseOffsetCalc = 0;
+    // 负差值只影响扫描起点，统一从 0 开始；上限钳到文件尾
+    usize scanPos = 0;
     if (end.offset() >= centralDirSize) {
-        baseOffsetCalc = static_cast<std::ptrdiff_t>(end.offset() - centralDirSize) -
-                         static_cast<std::ptrdiff_t>(centralDirOffset);
+        const auto absolute = static_cast<u64>(end.offset() - centralDirSize);
+        const auto declared = static_cast<u64>(end.getCentralDirectoryOffset());
+        const auto candidate = absolute >= declared ? absolute - declared : 0u;
+        scanPos = candidate > static_cast<u64>(fileLength) ? fileLength
+                                                           : static_cast<usize>(candidate);
     }
 
-    auto scanPos = static_cast<usize>(std::max<std::ptrdiff_t>(baseOffsetCalc, 0));
-    while (scanPos + 4 <= fileLength) {
+    while (scanPos < fileLength && fileLength - scanPos >= 4) {
         const auto sig = MemorySegmentUtil::readQuad(data, scanPos);
         if (sig == kLocalFileHeaderSignature || sig == kCentralDirectoryFileHeaderSignature) {
             return scanPos;
@@ -587,14 +623,10 @@ void JvmZipReader::read(ZipArchive& archive, const MemorySegment& data)
         if (cen->offset() < earliestCdfh) earliestCdfh = cen->offset();
 
         const auto resolvedLhOffset = Zip64Support::resolveLocalHeaderOffset(*cen);
-        const auto signedOffset     = static_cast<std::ptrdiff_t>(jvmBaseFileOffset) +
-                                  static_cast<std::ptrdiff_t>(resolvedLhOffset);
-        if (signedOffset >= 0) {
-            const auto offset = static_cast<usize>(signedOffset);
-            if (offset + 4 <= fileLength &&
-                MemorySegmentUtil::readQuad(data, offset) == kLocalFileHeaderSignature) {
-                entryOffsets->insert(offset);
-            }
+        const auto mapped = mapLocalOffset(jvmBaseFileOffset, resolvedLhOffset, fileLength, 4);
+        if (mapped.has_value() &&
+            MemorySegmentUtil::readQuad(data, *mapped) == kLocalFileHeaderSignature) {
+            entryOffsets->insert(*mapped);
         }
     }
     entryOffsets->insert(earliestCdfh);
@@ -611,12 +643,16 @@ void JvmZipReader::read(ZipArchive& archive, const MemorySegment& data)
                  "entry name looks like an injection or traversal attempt");
         }
 
-        const auto resolvedLhOffset  = Zip64Support::resolveLocalHeaderOffset(*cen);
-        const auto signedLocalOffset = static_cast<std::ptrdiff_t>(jvmBaseFileOffset) +
-                                       static_cast<std::ptrdiff_t>(resolvedLhOffset);
+        const auto resolvedLhOffset = Zip64Support::resolveLocalHeaderOffset(*cen);
+        const auto mapped = mapLocalOffset(jvmBaseFileOffset, resolvedLhOffset, fileLength, 4);
         // 跳过无效偏移
-        if (signedLocalOffset < 0) continue;
-        const auto localOffset = static_cast<usize>(signedLocalOffset);
+        if (!mapped.has_value()) {
+            emit(archive, ZipAnomalyKind::LocalHeaderSignatureMiss, cen->offset(), entryName,
+                 "LOC offset out of bounds (base=" + std::to_string(jvmBaseFileOffset) +
+                     ", relative=" + std::to_string(resolvedLhOffset) + ")");
+            continue;
+        }
+        const auto localOffset = *mapped;
 
         // 跳过重复 LOC 偏移
         if (!visitedOffsets.insert(localOffset).second) {
@@ -639,12 +675,7 @@ void JvmZipReader::read(ZipArchive& archive, const MemorySegment& data)
             }
         }
 
-        // 签名校验
-        if (localOffset + 4 > fileLength) {
-            emit(archive, ZipAnomalyKind::LocalHeaderSignatureMiss, localOffset, entryName,
-                 "LOC offset out of bounds");
-            continue;
-        }
+        // 签名校验（mapLocalOffset 已保证至少 4 字节可读）
         if (MemorySegmentUtil::readQuad(data, localOffset) != kLocalFileHeaderSignature) {
             emit(archive, ZipAnomalyKind::LocalHeaderSignatureMiss, localOffset, entryName,
                  "no LOC signature at CEN-resolved offset");
@@ -658,7 +689,7 @@ void JvmZipReader::read(ZipArchive& archive, const MemorySegment& data)
 
         bool localReadOk = false;
         // bounds check 防止 read 越界
-        if (localOffset + kLocalFileHeaderMinSize <= fileLength) {
+        if (fileLength - localOffset >= kLocalFileHeaderMinSize) {
             // 读出 LOC 头字段 + 文件数据（由 JvmLocalFileHeader::readFileData 处理）
             try {
                 local->read(data, localOffset);
