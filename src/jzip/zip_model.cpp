@@ -678,11 +678,13 @@ void JvmLocalFileHeader::readFileData(const MemorySegment& data, usize headerOff
         throw ZipParseException("local file data offset out of range", headerOffset);
     }
 
-    // Find ceiling: next header offset after data start.
+    // Find ceiling: 首个不早于数据起点的头部偏移（对齐 Java offset 的 ceiling）。
+    // 不能用 upper_bound：零长度条目的数据起点恰好等于下一个头部偏移，
+    // upper_bound 会跳过它，把后续结构算进本条目的 fileData。
     // Shared ptr avoids copying the full set (70k entries) per LocalFileHeader.
     usize data_end = data.byteSize();
     if (offsets_) {
-        auto it = offsets_->upper_bound(local_offset);
+        auto it = offsets_->lower_bound(local_offset);
         if (it != offsets_->end()) {
             data_end = *it;
         }
