@@ -10,6 +10,13 @@ namespace jzip {
 
 class LocalFileHeader;
 
+/// @brief 单条目解压输出的默认配额：min(1 GiB, compressedSize × 1000)，下限 1 MiB。
+///
+/// 用于处理来源不明 JAR 的公共入口（`ZipIO::decompressLocalFile`、
+/// `RecompressingZipWriter`），防止压缩炸弹把内存打满。需要更高配额的调用方
+/// 自行构造 Decompressor 并 `setMaxOutputSize`。
+ca::usize defaultEntryOutputCap(ca::usize compressedSize) noexcept;
+
 /// @brief 解压缩器接口。
 class Decompressor
 {

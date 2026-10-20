@@ -60,11 +60,14 @@ class RecompressingZipWriter : public ZipWriter
 {
 public:
     /// @brief 构造写入器，默认 target 为 0（stored）。
-    /// @param createDirectoryEntries 是否生成目录条目
-    /// @param targetMethod 目标压缩方式：0=stored, 8=deflated
+    /// @param createDirectoryEntries 是否保留名字以 '/' 结尾的目录条目
+    /// @param targetMethod 目标压缩方式：0=stored, 8=deflated；其他值在 write 时抛异常
     explicit RecompressingZipWriter(bool createDirectoryEntries = false, ca::u16 targetMethod = 0);
 
     /// @brief 写入 ZIP。
+    ///
+    /// 源条目 method 不是 0/8 时抛 ZipParseException（不静默丢条目）；
+    /// deflate 解压输出受 defaultEntryOutputCap 限制。
     void write(const ZipArchive& archive, std::ostream& os) override;
 
 private:

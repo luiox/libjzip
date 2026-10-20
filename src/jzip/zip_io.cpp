@@ -1,7 +1,5 @@
 #include "zip_io.hpp"
 
-#include <algorithm>
-#include <limits>
 #include <sstream>
 #include <utility>
 
@@ -17,23 +15,9 @@ namespace jzip {
 namespace {
 
 // 生产便捷路径的默认防线（Recaf 5b63ec87f 同类问题）：敌意 JAR 的 zip 炸弹
-// 条目此前可经本入口无界产出。配额 = min(每条目 1 GiB, compressedSize*1000
-// 饱和积)，下限 1 MiB（极小条目的合法膨胀不受 1000x 之外额约束）。需要更高
-// 配额的调用方自行构造 Decompressor 并 setMaxOutputSize。
-constexpr usize kDefaultEntryOutputCap = 1024ULL * 1024 * 1024;
-constexpr usize kMaxExpansionFactor    = 1000;
-constexpr usize kMinExpansionQuota     = 1024ULL * 1024;
-
-usize effectiveOutputCap(usize compressedSize)
-{
-    if (compressedSize > std::numeric_limits<usize>::max() / kMaxExpansionFactor) {
-        return kDefaultEntryOutputCap;
-    }
-    const usize scaled = compressedSize * kMaxExpansionFactor;
-    const usize quota =
-        std::min(std::max(scaled, kMinExpansionQuota), kDefaultEntryOutputCap);
-    return quota;
-}
+// 条目此前可经本入口无界产出。配额算法见 decompressor.hpp 的
+// defaultEntryOutputCap；需要更高配额的调用方自行构造 Decompressor 并
+// setMaxOutputSize。
 
 }   // namespace
 
@@ -103,7 +87,7 @@ std::vector<u8> ZipIO::decompressLocalFile(const LocalFileHeader& local)
     MemorySegment segment(local.getFileData());
 
     DeflateDecompressor decompressor;
-    decompressor.setMaxOutputSize(effectiveOutputCap(segment.byteSize()));
+    decompressor.setMaxOutputSize(defaultEntryOutputCap(segment.byteSize()));
     return decompressor.decompress(local, segment);
 }
 

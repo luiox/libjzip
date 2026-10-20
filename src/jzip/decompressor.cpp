@@ -13,6 +13,10 @@ namespace jzip {
 
 namespace {
 
+constexpr usize kDefaultEntryOutputCap = 1024ULL * 1024 * 1024;
+constexpr usize kMaxExpansionFactor    = 1000;
+constexpr usize kMinExpansionQuota     = 1024ULL * 1024;
+
 // 共享解压循环：预分配与增长均受 opt-in 上限钳制（maxOutput == 0 表示不限制）。
 // 敌意 JAR 批量扫描场景下，头部声称的 uncompressedSize 不可信——负值会经
 // usize 环绕变成天文数字预分配，虚高声明会直接 OOM；钳制后预分配最多到
@@ -71,6 +75,15 @@ std::vector<u8> decompress_with_stream(z_stream& stream, const LocalFileHeader& 
 }
 
 }   // namespace
+
+usize defaultEntryOutputCap(usize compressedSize) noexcept
+{
+    if (compressedSize > std::numeric_limits<usize>::max() / kMaxExpansionFactor) {
+        return kDefaultEntryOutputCap;
+    }
+    const usize scaled = compressedSize * kMaxExpansionFactor;
+    return std::min(std::max(scaled, kMinExpansionQuota), kDefaultEntryOutputCap);
+}
 
 std::vector<u8> DeflateDecompressor::decompress(const LocalFileHeader& header,
                                                 const MemorySegment&   compressedData)

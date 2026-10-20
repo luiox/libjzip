@@ -121,6 +121,8 @@ graph TD
 - 主动规范化结构
 - 不需要保留原始压缩布局
 
+它不静默丢条目：源 method 只支持 stored(0)/deflate(8)，其他值直接抛 `ZipParseException`；零字节普通文件照常写出，`createDirectoryEntries` 只控制名字以 `/` 结尾的目录条目是否保留。deflate 解压受 `defaultEntryOutputCap`（min(1 GiB, 压缩大小 × 1000)，下限 1 MiB）限制，防止压缩炸弹。
+
 ## 7. `jzip` 层：mapper
 
 `zip_mapper.hpp` 提供对 `ZipArchive` 中部件的映射。

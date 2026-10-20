@@ -395,8 +395,19 @@ RecompressingZipWriter::RecompressingZipWriter(bool createDirectoryEntries, u16 
 {}
 
 // 解压后重新压缩为指定 method（消除压缩差异）
+//
+// 不静默丢条目：无法解压的 method 直接抛错，零字节普通文件照常写出；
+// createDirectoryEntries_ 只决定名字以 '/' 结尾的目录条目是否保留。
 void RecompressingZipWriter::write(const ZipArchive& archive, std::ostream& os)
 {
+    constexpr u16 kStoredMethod  = 0;
+    constexpr u16 kDeflateMethod = 8;
+
+    if (targetMethod_ != kStoredMethod && targetMethod_ != kDeflateMethod) {
+        throw ZipParseException(
+            "RecompressingZipWriter: unsupported target method " + std::to_string(targetMethod_), 0);
+    }
+
     struct Entry
     {
         std::string name;
@@ -410,34 +421,49 @@ void RecompressingZipWriter::write(const ZipArchive& archive, std::ostream& os)
     std::vector<u8>    out;
 
     for (const auto* local : archive.getLocalFiles()) {
+        const std::string& entry_name  = local->getFileName();
+        const bool         isDirectory = !entry_name.empty() && entry_name.back() == '/';
+
         std::vector<u8> decompressed;
-        if (local->getCompressionMethod() == 0) {
+        if (local->getCompressionMethod() == kStoredMethod) {
             decompressed = local->getFileData();
         }
-        else if (local->getCompressionMethod() == 8) {
+        else if (local->getCompressionMethod() == kDeflateMethod) {
+            const auto         data = local->getFileData();
             DeflateDecompressor decomp;
-            decompressed = decomp.decompress(*local, MemorySegment(local->getFileData()));
+            decomp.setMaxOutputSize(defaultEntryOutputCap(data.size()));
+            decompressed = decomp.decompress(*local, MemorySegment(data));
         }
         else {
+            throw ZipParseException(
+                "RecompressingZipWriter: unsupported compression method " +
+                    std::to_string(local->getCompressionMethod()) + " for entry " + entry_name,
+                local->offset());
+        }
+
+        if (!createDirectoryEntries_ && isDirectory) {
             continue;
         }
 
-        if (!createDirectoryEntries_ && decompressed.empty()) {
-            continue;
-        }
+        const auto            header_offset =
+            checked_offset(out.size(), "local header offset", local->offset());
+        const std::vector<u8> name_bytes(entry_name.begin(), entry_name.end());
+        const auto            name_length =
+            checked_length(name_bytes.size(), "file name length", local->offset());
 
-        const auto header_offset = static_cast<u32>(out.size());
-        const auto name_bytes =
-            std::vector<u8>(local->getFileName().begin(), local->getFileName().end());
-
-        u16             method = decompressed.empty() ? 0 : targetMethod_;
+        const u16 method = decompressed.empty() ? kStoredMethod : targetMethod_;
         std::vector<u8> filedata;
-        if (method == 8) {
+        if (method == kDeflateMethod) {
             filedata = DeflateCompressor().compress(decompressed);
         }
         else {
             filedata = decompressed;
         }
+
+        const auto compressed_size =
+            checked_offset(filedata.size(), "compressed size", local->offset());
+        const auto uncompressed_size =
+            checked_offset(decompressed.size(), "uncompressed size", local->offset());
 
         ca::zip::Crc32 crcCalc;
         if (!decompressed.empty()) {
@@ -446,38 +472,34 @@ void RecompressingZipWriter::write(const ZipArchive& archive, std::ostream& os)
         u32 crc = crcCalc.value();
 
         append_u32_le(out, kLocalFileHeaderSignature);
-        append_u16_le(out, method == 8 ? 20 : 10);
+        append_u16_le(out, method == kDeflateMethod ? 20 : 10);
         append_u16_le(out, 0);
         append_u16_le(out, method);
         append_u16_le(out, 0);
         append_u16_le(out, 0);
         append_u32_le(out, crc);
-        append_u32_le(out, static_cast<u32>(filedata.size()));
-        append_u32_le(out, static_cast<u32>(decompressed.size()));
-        append_u16_le(out, static_cast<u16>(name_bytes.size()));
+        append_u32_le(out, compressed_size);
+        append_u32_le(out, uncompressed_size);
+        append_u16_le(out, name_length);
         append_u16_le(out, 0);
 
         out.insert(out.end(), name_bytes.begin(), name_bytes.end());
         out.insert(out.end(), filedata.begin(), filedata.end());
 
-        entries.push_back(Entry{local->getFileName(),
-                                crc,
-                                static_cast<u32>(filedata.size()),
-                                static_cast<u32>(decompressed.size()),
-                                method,
+        entries.push_back(Entry{entry_name, crc, compressed_size, uncompressed_size, method,
                                 header_offset});
     }
 
-    if (entries.empty() && out.empty()) {
-        return;
-    }
-
-    const auto central_dir_offset = static_cast<u32>(out.size());
+    // 空归档也写 EOCD：输出应是合法 ZIP，而不是零字节流
+    const auto central_dir_offset =
+        checked_offset(out.size(), "central directory offset", 0);
     for (const auto& entry : entries) {
-        const auto name_bytes = std::vector<u8>(entry.name.begin(), entry.name.end());
+        const std::vector<u8> name_bytes(entry.name.begin(), entry.name.end());
+        const auto            name_length = checked_length(
+            name_bytes.size(), "file name length", entry.local_header_offset);
         append_u32_le(out, kCentralDirectoryFileHeaderSignature);
         append_u16_le(out, 20);
-        append_u16_le(out, entry.method == 8 ? 20 : 10);
+        append_u16_le(out, entry.method == kDeflateMethod ? 20 : 10);
         append_u16_le(out, 0);
         append_u16_le(out, entry.method);
         append_u16_le(out, 0);
@@ -485,7 +507,7 @@ void RecompressingZipWriter::write(const ZipArchive& archive, std::ostream& os)
         append_u32_le(out, entry.crc32);
         append_u32_le(out, entry.compressed_size);
         append_u32_le(out, entry.uncompressed_size);
-        append_u16_le(out, static_cast<u16>(name_bytes.size()));
+        append_u16_le(out, name_length);
         append_u16_le(out, 0);
         append_u16_le(out, 0);
         append_u16_le(out, 0);
@@ -495,8 +517,9 @@ void RecompressingZipWriter::write(const ZipArchive& archive, std::ostream& os)
         out.insert(out.end(), name_bytes.begin(), name_bytes.end());
     }
 
-    const auto central_dir_size = static_cast<u32>(out.size()) - central_dir_offset;
-    const auto entry_count      = static_cast<u16>(entries.size());
+    const auto central_dir_size = checked_offset(
+        out.size() - central_dir_offset, "central directory size", 0);
+    const auto entry_count = checked_length(entries.size(), "entry count", 0);
 
     append_u32_le(out, kEndOfCentralDirectorySignature);
     append_u16_le(out, 0);
@@ -507,10 +530,8 @@ void RecompressingZipWriter::write(const ZipArchive& archive, std::ostream& os)
     append_u32_le(out, central_dir_offset);
     append_u16_le(out, 0);
 
-    if (!out.empty()) {
-        os.write(reinterpret_cast<const char*>(out.data()),
-                 static_cast<std::streamsize>(out.size()));
-    }
+    os.write(reinterpret_cast<const char*>(out.data()),
+             static_cast<std::streamsize>(out.size()));
 }
 
 }   // namespace jzip
