@@ -4,7 +4,7 @@
 > 如何识别、如何防御，并用 libjzip 的 `test_resource/` 样本作为实例。
 > 其他基于 libjzip 的上层项目在容器层遇到同类问题时，
 > **不要另起一套术语**，直接引用本文件的分类法，把自己项目里遇到的样本挂到对应分类下。
-> 类关系见 libjzip [MODEL.md](model.md)，读写算法见 [ALGORITHM.md](algorithm.md)。
+> 类关系见 libjzip [model.md](model.md)，读写算法见 [ALGORITHM.md](algorithm.md)。
 
 ---
 

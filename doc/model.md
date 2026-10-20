@@ -1,7 +1,7 @@
 # LL-Java-Zip 数据模型与类关系
 
 > libjzip (C++) 的类型体系与类关系，对照 LL-Java-Zip v2.9.0 设计。
-> 算法流程见 [ALGORITHM.md](ALGORITHM.md)。
+> 算法流程见 [algorithm.md](algorithm.md)。
 
 ---
 
@@ -83,8 +83,8 @@ graph TD
 | `lastModFileTime` | `int` | `ca::u16` |
 | `lastModFileDate` | `int` | `ca::u16` |
 | `crc32` | `int` | `ca::u32` |
-| `compressedSize` | `long` (4-byte LE→`int`) | `ca::u32` |
-| `uncompressedSize` | `long` | `ca::u32` |
+| `compressedSize` | `long` (4-byte LE→`int`) | `ca::i64` |
+| `uncompressedSize` | `long` | `ca::i64` |
 | `fileNameLength` | `int` | `ca::u16` |
 | `extraFieldLength` | `int` | `ca::u16` |
 | `fileName` | `StringData` | `std::string` |
@@ -105,7 +105,7 @@ graph TD
     CZipReader --> CNaive
 ```
 
-> C++ 简化了继承链，三个 reader 均直接实现 `ZipReader` 接口（Java 版有 `AbstractZipReader` 中间层及依赖 `java.util.zip.ZipFile` 的 `AdaptingZipReader`）。各 reader 的读取算法见 [ALGORITHM.md](ALGORITHM.md) §2。
+> C++ 简化了继承链，三个 reader 均直接实现 `ZipReader` 接口（Java 版有 `AbstractZipReader` 中间层及依赖 `java.util.zip.ZipFile` 的 `AdaptingZipReader`）。各 reader 的读取算法见 [algorithm.md](algorithm.md) §2。
 
 ### 2.4 ZipPartAllocator 接口（工厂模式）
 
@@ -213,7 +213,7 @@ graph LR
 - Parts 列表未排序时是无序的（由读取器添加顺序决定）
 - `getLocalFiles()` 和 `getCentralDirectories()` 每次遍历全部 parts，按 `PartType` 过滤
 - 排序后：`LOC(0) < LOC(1) < ... < CEN(0) < CEN(1) < ... < END`
-- Caller 负责 `close()` 释放 memory-mapped file 的 `FileChannel`
+- C++ 版模型不持有文件句柄：输入是 `MemorySegment`，条目数据在解析时复制，`prefixData()` 是输入段的切片视图；输入由裸指针构造时，caller 需保证它比 archive 活得久
 
 ### 3.2 双向链接（CEN↔LOC）
 
@@ -273,7 +273,7 @@ flowchart LR
     PartRaw -->|"ZipCompressions.decompress()"| Decompressed
 ```
 
-整个过程中**原始字节只读、不复制**（MemorySegment 是视图而非副本）。只有 `decompress()` 产生新的 `byte[]`。
+`MemorySegment` 是只读视图，不拥有外部缓冲区；从 `std::vector` 构造时会复制一份并共享所有权。解析时每个条目的 `fileData` 通过 `toByteArray()` 复制进 `std::vector`，所以条目数据不依赖输入缓冲区；`prefixData()` 仍是输入段的切片。`decompress()` 与写回各自产生新的字节数组。
 
 ---
 
@@ -331,13 +331,13 @@ graph TD
 
 ### 读取
 
-`ZipIO.readJvm(path)` → `FileChannel.map → MemorySegment` → `JvmZipReader.read(archive, data)`。
+`ZipIO::readJvm(data)` → `JvmZipReader.read(archive, data)`。本库不直接读文件：路径入口 `ZipIO::readAdaptingIO(path)` 委托 libca 的 `ca::zip::ZipFile`，再把结果转成 `ZipArchive`。
 
-`JvmZipReader.read` 内部按 EOCD 查找/验证 → CEN 解析 → baseOffset 回退 → LOC 解析 → 双向链接 → `adoptLinkedCentralDirectoryValues` 的顺序推进，最终 `archive.sort(OffsetComparator)` 后返回。详细流程见 [ALGORITHM.md](ALGORITHM.md) §2.2。
+`JvmZipReader.read` 内部按 EOCD 查找/验证 → CEN 解析 → baseOffset 回退 → LOC 解析 → 双向链接 → `adoptLinkedCentralDirectoryValues` 的顺序推进，最终 `archive.sort(OffsetComparator)` 后返回。详细流程见 [algorithm.md](algorithm.md) §2.2。
 
 ### 写入
 
-`DirectZipWriter.write` 遍历 `getLocalFiles()` 写 LOC 块、遍历 `getCentralDirectories()` 写 CEN 块、最后写 EOCD（若存在）。字段写出顺序为：签名 → version/gpFlag/method/crc32/sizes → fileNameLength/extraFieldLength → fileName/extra → fileData。`RecompressingZipWriter` 则解压后重新压缩。详见 [ALGORITHM.md](ALGORITHM.md) §3。
+`DirectZipWriter.write` 遍历 `getLocalFiles()` 写 LOC 块、遍历 `getCentralDirectories()` 写 CEN 块、最后写 EOCD（若存在）。字段写出顺序为：签名 → version/gpFlag/method/crc32/sizes → fileNameLength/extraFieldLength → fileName/extra → fileData。`RecompressingZipWriter` 则解压后重新压缩。详见 [algorithm.md](algorithm.md) §3。
 
 ### withMapping
 
@@ -482,5 +482,5 @@ class ZipParseException : public std::runtime_error {
 - 无 RTTI：部件类型经虚函数 `type()` 返回的 `PartType` 枚举区分（`zip_type_traits.hpp` 为 `ca::core::tag_cast` 提供 `TypeOf` 特化备用）
 - 异常: `ZipParseException` 代替 `IOException`，携带 `offset()` 定位错误
 - `MemorySegment` 构造: `MemorySegment(vector)` 或 `MemorySegment(ptr, size)`
-- `ZipArchive` 通过 `std::unique_ptr` 管理 `ZipPart` 生命周期；原始字节只读不复制（视图），只有 `decompress()` 产生新 `byte[]`
+- `ZipArchive` 通过 `std::unique_ptr` 管理 `ZipPart` 生命周期；条目 `fileData` 解析时复制，`prefixData` 是输入段切片，`decompress()` 与写回各产生新字节数组
 - 条目查找优先使用 `CentralDirectoryFileHeader` 的 `fileName`（CEN 为权威来源）
