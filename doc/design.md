@@ -130,7 +130,7 @@ graph TD
 - `IdentityZipPartMapper`：不改
 - `CentralAdoptingMapper`：让 LOC 采用 CEN 值
 - `JvmClassDirectoryMapper`：修正 `.class/` 目录名这类 JVM 特殊情况
-- `CopyingZipPartMapper`：做深拷贝映射
+- `CopyingZipPartMapper`：按类型调用 `copy()` 返回独立副本；副本不保留 LOC/CEN 互链，JVM 派生的 LOC 退化为基类副本
 
 典型链路是：
 

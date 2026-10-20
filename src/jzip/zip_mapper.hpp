@@ -69,11 +69,13 @@ public:
     ZipPart* map(ZipArchive& archive, ZipPart* part) const override;
 };
 
-/// @brief 复制式映射器。
+/// @brief 复制式映射器：返回每个部件的独立深拷贝，原部件由 mapArchive 释放。
+/// @note 深拷贝不保留 LocalFileHeader/CentralDirectoryFileHeader 的 link 关系；
+///       JvmLocalFileHeader 会退化为基类副本（见 LocalFileHeader::copy()）。
 class CopyingZipPartMapper final : public ZipPartMapper
 {
 public:
-    /// @brief 映射部件。
+    /// @brief 映射部件（返回新分配的深拷贝，调用方接管所有权）。
     ZipPart* map(ZipArchive& archive, ZipPart* part) const override;
 };
 

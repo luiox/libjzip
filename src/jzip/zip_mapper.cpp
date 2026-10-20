@@ -97,11 +97,19 @@ ZipPart* JvmClassDirectoryMapper::map(ZipArchive& archive, ZipPart* part) const
     return part;
 }
 
-// 复制映射：原样返回（用于后续修改副本）
+// 复制映射：返回独立深拷贝；原部件由 mapArchive 在收尾时释放
 ZipPart* CopyingZipPartMapper::map(ZipArchive& archive, ZipPart* part) const
 {
     (void)archive;
-    return part;
+    switch (part->type()) {
+    case PartType::LOCAL_FILE_HEADER:
+        return static_cast<LocalFileHeader*>(part)->copy().release();
+    case PartType::CENTRAL_DIRECTORY_FILE_HEADER:
+        return static_cast<CentralDirectoryFileHeader*>(part)->copy().release();
+    case PartType::END_OF_CENTRAL_DIRECTORY:
+        return static_cast<EndOfCentralDirectory*>(part)->copy().release();
+    }
+    return nullptr;
 }
 
 }   // namespace jzip
