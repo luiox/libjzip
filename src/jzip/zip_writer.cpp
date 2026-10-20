@@ -35,6 +35,45 @@ void append_u32_le(std::vector<u8>& out, u32 value)
     out.push_back(static_cast<u8>((value >> 24) & 0xFFu));
 }
 
+// 本库只写 ZIP32；字段超出目标宽度时必须拒绝，不能截断后产出损坏归档
+u16 checked_length(u64 value, const char* field, usize offset)
+{
+    if (value > std::numeric_limits<u16>::max()) {
+        throw ZipParseException(std::string("ZIP32 length overflow: ") + field + "=" +
+                                    std::to_string(value),
+                                offset);
+    }
+    return static_cast<u16>(value);
+}
+
+u32 checked_offset(u64 value, const char* field, usize offset)
+{
+    if (value > std::numeric_limits<u32>::max()) {
+        throw ZipParseException(std::string("ZIP32 offset overflow: ") + field + "=" +
+                                    std::to_string(value),
+                                offset);
+    }
+    return static_cast<u32>(value);
+}
+
+u32 checked_u32_value(i64 value, const char* field, usize offset)
+{
+    if (value < 0 || static_cast<u64>(value) > std::numeric_limits<u32>::max()) {
+        throw ZipParseException(
+            std::string("ZIP32 field overflow: ") + field + "=" + std::to_string(value), offset);
+    }
+    return static_cast<u32>(value);
+}
+
+u16 checked_u16_value(i64 value, const char* field, usize offset)
+{
+    if (value < 0 || static_cast<u64>(value) > std::numeric_limits<u16>::max()) {
+        throw ZipParseException(
+            std::string("ZIP32 field overflow: ") + field + "=" + std::to_string(value), offset);
+    }
+    return static_cast<u16>(value);
+}
+
 std::vector<u8> serialize_extra_fields(const std::vector<ExtraFieldEntry>& entries)
 {
     std::vector<u8> out;
@@ -67,6 +106,16 @@ std::vector<u8> ZipWriter::writeToByteArray(const ZipArchive& archive)
 // 测试期望的"byte-stable roundtrip"）。
 void DirectZipWriter::writeLocalFile(const LocalFileHeader& file, std::vector<u8>& out)
 {
+    const auto& name        = file.getFileName();
+    const auto  extra_bytes = serialize_extra_fields(file.getExtraFields());
+    const auto  name_length = checked_length(name.size(), "file name length", file.offset());
+    const auto  extra_length =
+        checked_length(extra_bytes.size(), "extra field length", file.offset());
+    const auto compressed_size =
+        checked_u32_value(file.getCompressedSize(), "compressed size", file.offset());
+    const auto uncompressed_size =
+        checked_u32_value(file.getUncompressedSize(), "uncompressed size", file.offset());
+
     append_u32_le(out, kLocalFileHeaderSignature);
     append_u16_le(out, 20);   // versionNeededToExtract（与旧 C++ 行为一致）
     append_u16_le(out, file.getGeneralPurposeBitFlag());
@@ -74,13 +123,11 @@ void DirectZipWriter::writeLocalFile(const LocalFileHeader& file, std::vector<u8
     append_u16_le(out, file.getLastModFileTime());
     append_u16_le(out, file.getLastModFileDate());
     append_u32_le(out, file.getCrc32());
-    append_u32_le(out, static_cast<u32>(file.getCompressedSize()));
-    append_u32_le(out, static_cast<u32>(file.getUncompressedSize()));
-    const auto extra_bytes = serialize_extra_fields(file.getExtraFields());
-    append_u16_le(out, static_cast<u16>(file.getFileName().size()));
-    append_u16_le(out, static_cast<u16>(extra_bytes.size()));
+    append_u32_le(out, compressed_size);
+    append_u32_le(out, uncompressed_size);
+    append_u16_le(out, name_length);
+    append_u16_le(out, extra_length);
 
-    const auto& name = file.getFileName();
     for (size_t k = 0; k < name.size(); ++k) out.push_back(static_cast<u8>(name[k]));
     for (size_t k = 0; k < extra_bytes.size(); ++k) out.push_back(extra_bytes[k]);
     const auto& data = file.getFileData();
@@ -91,6 +138,25 @@ void DirectZipWriter::writeLocalFile(const LocalFileHeader& file, std::vector<u8
 void DirectZipWriter::writeCentralDirectory(const CentralDirectoryFileHeader& dir,
                                             std::vector<u8>&                  out)
 {
+    const auto& name        = dir.getFileName();
+    const auto& extra_bytes = dir.getExtraField();
+    const auto& comment     = dir.getFileComment();
+    const auto  name_length = checked_length(name.size(), "file name length", dir.offset());
+    const auto  extra_length =
+        checked_length(extra_bytes.size(), "extra field length", dir.offset());
+    const auto comment_length =
+        checked_length(comment.size(), "file comment length", dir.offset());
+    const auto compressed_size =
+        checked_u32_value(dir.getCompressedSize(), "compressed size", dir.offset());
+    const auto uncompressed_size =
+        checked_u32_value(dir.getUncompressedSize(), "uncompressed size", dir.offset());
+    const auto disk_number =
+        checked_u16_value(dir.getDiskNumberStart(), "disk number start", dir.offset());
+    const auto internal_attributes = checked_u16_value(dir.getInternalFileAttributes(),
+                                                       "internal file attributes", dir.offset());
+    const auto relative_offset = checked_u32_value(dir.getRelativeOffsetOfLocalHeader(),
+                                                   "relative offset of local header", dir.offset());
+
     append_u32_le(out, kCentralDirectoryFileHeaderSignature);
     append_u16_le(out, dir.getVersionMadeBy());
     append_u16_le(out, dir.getVersionNeededToExtract());
@@ -99,37 +165,50 @@ void DirectZipWriter::writeCentralDirectory(const CentralDirectoryFileHeader& di
     append_u16_le(out, dir.getLastModFileTime());
     append_u16_le(out, dir.getLastModFileDate());
     append_u32_le(out, dir.getCrc32());
-    append_u32_le(out, static_cast<u32>(dir.getCompressedSize()));
-    append_u32_le(out, static_cast<u32>(dir.getUncompressedSize()));
-    const auto& extra_bytes = dir.getExtraField();
-    append_u16_le(out, dir.getFileNameLength());
-    append_u16_le(out, static_cast<u16>(extra_bytes.size()));
-    append_u16_le(out, dir.getFileCommentLength());
-    append_u16_le(out, static_cast<u16>(dir.getDiskNumberStart()));
-    append_u16_le(out, static_cast<u16>(dir.getInternalFileAttributes()));
+    append_u32_le(out, compressed_size);
+    append_u32_le(out, uncompressed_size);
+    append_u16_le(out, name_length);
+    append_u16_le(out, extra_length);
+    append_u16_le(out, comment_length);
+    append_u16_le(out, disk_number);
+    append_u16_le(out, internal_attributes);
     append_u32_le(out, dir.getExternalFileAttributes());
-    append_u32_le(out, static_cast<u32>(dir.getRelativeOffsetOfLocalHeader()));
+    append_u32_le(out, relative_offset);
 
-    const auto& name = dir.getFileName();
     for (size_t k = 0; k < name.size(); ++k) out.push_back(static_cast<u8>(name[k]));
     for (size_t k = 0; k < extra_bytes.size(); ++k) out.push_back(extra_bytes[k]);
-    const auto& comment = dir.getFileComment();
     for (size_t k = 0; k < comment.size(); ++k) out.push_back(static_cast<u8>(comment[k]));
 }
 
 // 对标 Java DirectZipWriter.writeEnd()
 void DirectZipWriter::writeEnd(const EndOfCentralDirectory& end, std::vector<u8>& out)
 {
-    append_u32_le(out, kEndOfCentralDirectorySignature);
-    append_u16_le(out, static_cast<u16>(end.getDiskNumber()));
-    append_u16_le(out, static_cast<u16>(end.getCentralDirectoryStartDisk()));
-    append_u16_le(out, static_cast<u16>(end.getCentralDirectoryStartOffset()));
-    append_u16_le(out, static_cast<u16>(end.getNumEntries()));
-    append_u32_le(out, static_cast<u32>(end.getCentralDirectorySize()));
-    append_u32_le(out, static_cast<u32>(end.getCentralDirectoryOffset()));
-    append_u16_le(out, end.getZipCommentLength());
+    const auto& comment        = end.getZipComment();
+    const auto  comment_length = checked_length(comment.size(), "zip comment length", end.offset());
+    const auto  disk_number =
+        checked_u16_value(end.getDiskNumber(), "disk number", end.offset());
+    const auto start_disk =
+        checked_u16_value(end.getCentralDirectoryStartDisk(), "central directory start disk",
+                          end.offset());
+    const auto entries_on_disk =
+        checked_u16_value(end.getCentralDirectoryStartOffset(), "entries on this disk",
+                          end.offset());
+    const auto total_entries =
+        checked_u16_value(end.getNumEntries(), "total entries", end.offset());
+    const auto cen_size = checked_u32_value(end.getCentralDirectorySize(),
+                                            "central directory size", end.offset());
+    const auto cen_offset = checked_u32_value(end.getCentralDirectoryOffset(),
+                                              "central directory offset", end.offset());
 
-    const auto& comment = end.getZipComment();
+    append_u32_le(out, kEndOfCentralDirectorySignature);
+    append_u16_le(out, disk_number);
+    append_u16_le(out, start_disk);
+    append_u16_le(out, entries_on_disk);
+    append_u16_le(out, total_entries);
+    append_u32_le(out, cen_size);
+    append_u32_le(out, cen_offset);
+    append_u16_le(out, comment_length);
+
     out.insert(out.end(), comment.begin(), comment.end());
 }
 
@@ -143,13 +222,16 @@ void DirectZipWriter::writeBuiltCentralDirectories(const ZipArchive&       archi
 {
     const auto& locals = archive.getLocalFiles();
     for (usize i = 0; i < locals.size(); ++i) {
-        const auto* local = locals[i];
-        if (local->getFileName().size() > static_cast<usize>(std::numeric_limits<u16>::max())) {
-            throw ZipParseException("file name too long for ZIP32", local->offset());
-        }
-        if (local->getExtraField().size() > static_cast<usize>(std::numeric_limits<u16>::max())) {
-            throw ZipParseException("extra field too large for ZIP32", local->offset());
-        }
+        const auto* local      = locals[i];
+        const auto& name       = local->getFileName();
+        const auto& extra      = local->getExtraField();
+        const auto  name_length = checked_length(name.size(), "file name length", local->offset());
+        const auto  extra_length =
+            checked_length(extra.size(), "extra field length", local->offset());
+        const auto compressed_size =
+            checked_u32_value(local->getCompressedSize(), "compressed size", local->offset());
+        const auto uncompressed_size =
+            checked_u32_value(local->getUncompressedSize(), "uncompressed size", local->offset());
 
         append_u32_le(out, kCentralDirectoryFileHeaderSignature);
         append_u16_le(out, 20);   // versionMadeBy
@@ -159,19 +241,18 @@ void DirectZipWriter::writeBuiltCentralDirectories(const ZipArchive&       archi
         append_u16_le(out, local->getLastModFileTime());
         append_u16_le(out, local->getLastModFileDate());
         append_u32_le(out, local->getCrc32());
-        append_u32_le(out, static_cast<u32>(local->getCompressedSize()));
-        append_u32_le(out, static_cast<u32>(local->getUncompressedSize()));
-        append_u16_le(out, static_cast<u16>(local->getFileName().size()));
-        append_u16_le(out, static_cast<u16>(local->getExtraField().size()));
+        append_u32_le(out, compressed_size);
+        append_u32_le(out, uncompressed_size);
+        append_u16_le(out, name_length);
+        append_u16_le(out, extra_length);
         append_u16_le(out, 0);   // fileCommentLength
         append_u16_le(out, 0);   // diskNumberStart
         append_u16_le(out, 0);   // internalFileAttributes
         append_u32_le(out, 0);   // externalFileAttributes
         append_u32_le(out, localHeaderOffsets[i]);
 
-        const auto& name = local->getFileName();
         out.insert(out.end(), name.begin(), name.end());
-        append_memory_segment(out, MemorySegment(local->getExtraField()));
+        append_memory_segment(out, MemorySegment(extra));
     }
 }
 
@@ -183,13 +264,17 @@ void DirectZipWriter::writeBuiltCentralDirectories(const ZipArchive&       archi
 void DirectZipWriter::writeBuiltEnd(usize entryCount, usize cenSize, usize cenOffset,
                                     std::vector<u8>& out)
 {
+    const auto entries = checked_length(entryCount, "entry count", 0);
+    const auto size    = checked_offset(cenSize, "central directory size", 0);
+    const auto offset  = checked_offset(cenOffset, "central directory offset", 0);
+
     append_u32_le(out, kEndOfCentralDirectorySignature);
-    append_u16_le(out, 0);                              // diskNumber
-    append_u16_le(out, 0);                              // centralDirectoryStartDisk
-    append_u16_le(out, static_cast<u16>(entryCount));   // numEntriesOnDisk
-    append_u16_le(out, static_cast<u16>(entryCount));   // totalNumEntries
-    append_u32_le(out, static_cast<u32>(cenSize));
-    append_u32_le(out, static_cast<u32>(cenOffset));
+    append_u16_le(out, 0);   // diskNumber
+    append_u16_le(out, 0);   // centralDirectoryStartDisk
+    append_u16_le(out, entries);   // numEntriesOnDisk
+    append_u16_le(out, entries);   // totalNumEntries
+    append_u32_le(out, size);
+    append_u32_le(out, offset);
     append_u16_le(out, 0);   // zipCommentLength
 }
 
@@ -198,6 +283,12 @@ void DirectZipWriter::writeBuiltEnd(usize entryCount, usize cenSize, usize cenOf
 // 从 locals 重建（保留旧 C++ 测试场景的兼容性）
 void DirectZipWriter::write(const ZipArchive& archive, std::ostream& os)
 {
+    const auto& centrals   = archive.getCentralDirectories();
+    const auto& locals     = archive.getLocalFiles();
+    const auto  entryCount = !centrals.empty() ? centrals.size() : locals.size();
+    // EOCD 的条目计数是 u16；数量超限时在产生任何输出前失败
+    checked_length(entryCount, "entry count", 0);
+
     std::vector<u8> out;
 
     // C++ 扩展：先写前缀数据（Java 没有此概念）
@@ -206,15 +297,9 @@ void DirectZipWriter::write(const ZipArchive& archive, std::ostream& os)
     // 第一阶段：所有 Local File Header
     // 记录每个 LFH 在输出中的起始偏移量，供阶段二从 locals 重建 CEN 时使用
     std::vector<u32> localHeaderOffsets;
-    localHeaderOffsets.reserve(archive.getLocalFiles().size());
-    for (const auto* local : archive.getLocalFiles()) {
-        if (local->getFileName().size() > static_cast<usize>(std::numeric_limits<u16>::max())) {
-            throw ZipParseException("file name too long for ZIP32", local->offset());
-        }
-        if (local->getExtraField().size() > static_cast<usize>(std::numeric_limits<u16>::max())) {
-            throw ZipParseException("extra field too large for ZIP32", local->offset());
-        }
-        localHeaderOffsets.push_back(static_cast<u32>(out.size()));
+    localHeaderOffsets.reserve(locals.size());
+    for (const auto* local : locals) {
+        localHeaderOffsets.push_back(checked_offset(out.size(), "local header offset", 0));
         writeLocalFile(*local, out);
     }
 
@@ -227,9 +312,8 @@ void DirectZipWriter::write(const ZipArchive& archive, std::ostream& os)
     // 的 jvmBaseFileOffset），reader 会把 CEN 映射到错误的 LFH 位置。
     // 另一关键修复：必须按文件名匹配 CEN 到 LFH，不能假设 CEN 顺序 = LFH 顺序
     // （merged jar 中 CEN=[Hello.class, META-INF/...]、LFH=[META-INF/..., Hello.class]）。
-    const auto  cenOffset = out.size();
-    const auto& centrals  = archive.getCentralDirectories();
-    const auto& locals    = archive.getLocalFiles();
+    const auto cenOffset = out.size();
+    checked_offset(cenOffset, "central directory offset", 0);
     std::vector<std::unique_ptr<CentralDirectoryFileHeader>>  cenCopies;
     std::unordered_map<const LocalFileHeader*, size_t>        localIndexByPtr;
     std::unordered_map<std::string_view, std::vector<size_t>> localIndicesByName;
@@ -282,8 +366,8 @@ void DirectZipWriter::write(const ZipArchive& archive, std::ostream& os)
     else {
         writeBuiltCentralDirectories(archive, localHeaderOffsets, out);
     }
-    const auto cenSize    = out.size() - cenOffset;
-    const auto entryCount = !centrals.empty() ? centrals.size() : locals.size();
+    const auto cenSize = out.size() - cenOffset;
+    checked_offset(cenSize, "central directory size", 0);
 
     // 第三阶段：EOCD
     // 对标 Java：优先用 archive.getEnd()（保留 diskNumber、zipComment 等字段）
