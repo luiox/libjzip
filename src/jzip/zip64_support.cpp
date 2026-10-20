@@ -1,6 +1,8 @@
 ﻿#include "zip64_support.hpp"
 #include "memory_segment.hpp"
 
+#include <limits>
+
 using namespace ca;
 
 namespace jzip {
@@ -11,6 +13,22 @@ constexpr u64 kZip64RecordMinLength = 56;
 constexpr u64 kZip64MinUpperBoundary = kZip64LocatorLength + kZip64RecordMinLength;
 constexpr u32 kZip64LocatorSig      = 0x07064b50u;
 constexpr u32 kZip64RecordSig       = 0x06064b50u;
+
+/// 计算绝对位置与 EOCD/CEN 声明偏移的有符号差，结果饱和到 ptrdiff_t。
+/// 声明值来自不可信输入，直接相减可能溢出；负值统一表示声明偏移大于
+/// 实际位置（即 baseOffset 为负），调用方按不可映射处理。
+std::ptrdiff_t offset_delta(usize absolute, u64 declared)
+{
+    constexpr auto kMax = static_cast<u64>(std::numeric_limits<std::ptrdiff_t>::max());
+    if (static_cast<u64>(absolute) >= declared) {
+        const u64 diff = static_cast<u64>(absolute) - declared;
+        return diff > kMax ? std::numeric_limits<std::ptrdiff_t>::max()
+                           : static_cast<std::ptrdiff_t>(diff);
+    }
+    const u64 diff = declared - static_cast<u64>(absolute);
+    return diff > kMax ? std::numeric_limits<std::ptrdiff_t>::min()
+                       : -static_cast<std::ptrdiff_t>(diff);
+}
 }   // namespace
 
 std::optional<Zip64EndInfo> Zip64Support::tryReadZip64EndInfo(const MemorySegment& data,
@@ -76,16 +94,21 @@ ResolvedEnd Zip64Support::resolveEndOfCentralDirectory(const MemorySegment&   da
         if (z64.recordOffset >= static_cast<usize>(z64.centralDirectorySize)) {
             centralDirectoryStart = z64.recordOffset - static_cast<usize>(z64.centralDirectorySize);
         }
-        std::ptrdiff_t baseOffset = static_cast<std::ptrdiff_t>(centralDirectoryStart) -
-                                    static_cast<std::ptrdiff_t>(z64.centralDirectoryOffset);
+        std::ptrdiff_t baseOffset = offset_delta(centralDirectoryStart, z64.centralDirectoryOffset);
 
         return ResolvedEnd{
             centralDirectoryStart, baseOffset, z64.recordOffset, std::move(zip64Info)};
     }
 
-    usize centralDirectoryStart = endOffset - static_cast<usize>(end.getCentralDirectorySize());
-    std::ptrdiff_t baseOffset   = static_cast<std::ptrdiff_t>(centralDirectoryStart) -
-                                static_cast<std::ptrdiff_t>(end.getCentralDirectoryOffset());
+    // EOCD 声明的 CEN 大小不能超过 EOCD 自身位置：否则 endOffset - cdSize
+    // 无符号回绕，后续 CEN 解析会以天文偏移为起点
+    const auto cdSize = static_cast<u64>(end.getCentralDirectorySize());
+    if (cdSize > static_cast<u64>(endOffset)) {
+        throw ZipParseException("central directory size exceeds EOCD offset", endOffset);
+    }
+    usize centralDirectoryStart = endOffset - static_cast<usize>(cdSize);
+    std::ptrdiff_t baseOffset =
+        offset_delta(centralDirectoryStart, static_cast<u64>(end.getCentralDirectoryOffset()));
 
     return ResolvedEnd{centralDirectoryStart, baseOffset, endOffset, std::nullopt};
 }
