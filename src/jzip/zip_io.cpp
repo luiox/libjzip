@@ -86,6 +86,14 @@ std::vector<u8> ZipIO::decompressLocalFile(const LocalFileHeader& local)
 
     MemorySegment segment(local.getFileData());
 
+    // 无压缩字节的 DEFLATED 条目（部分写入器对空内容省略空流字节，或 JVM 路径
+    // 按 CEN 权威把零大小条目对齐为空）：内容语义为空，与 STORED 直通一致返回
+    // 空，而不是把空输入喂给 zlib 换 Z_BUF_ERROR。非零长敌意流仍走正常解压
+    // 异常通道。
+    if (segment.byteSize() == 0) {
+        return {};
+    }
+
     DeflateDecompressor decompressor;
     decompressor.setMaxOutputSize(defaultEntryOutputCap(segment.byteSize()));
     return decompressor.decompress(local, segment);

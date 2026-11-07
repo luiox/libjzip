@@ -747,8 +747,19 @@ void JvmLocalFileHeader::adoptLinkedCentralDirectoryValues()
     setUncompressedSize(linkedDirectory->getUncompressedSize());
     setFileName(linkedDirectory->getFileName());
 
+    if (data_.byteSize() == 0) {
+        return;
+    }
+
+    // CEN 权威大小为 0（getExplicitFileDataLength() 把非正大小折叠为 -1）：
+    // 结论是本条目无数据。前向扫描可能把邻接的下一个结构（LFH/CEN）或数据
+    // 描述符字节算进本条目 fileData，这里不能提前返回留下与 CEN 矛盾的内容，
+    // 强制对齐为空，保持 getFileData() 与 CEN 大小自洽。
     const i64 fileDataLength = getExplicitFileDataLength();
-    if (data_.byteSize() == 0 || fileDataLength < 0) {
+    if (fileDataLength < 0) {
+        setFileData({});
+        relativeDataOffsetEnd_ = relativeDataOffsetStart_;
+        foundData_             = false;
         return;
     }
 
