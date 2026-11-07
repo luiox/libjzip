@@ -1,4 +1,8 @@
-﻿#pragma once
+﻿/// @defgroup zip_io 门面（ZipIO：读取 / 写入 / 解压便捷入口）
+///
+/// readStandard / readJvm / readNaive 三读取入口、writeDirect 写回、
+/// decompressLocalFile 解压（自带每条目输出配额与空负载回空）。
+#pragma once
 
 #include <string>
 #include <vector>

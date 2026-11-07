@@ -1,4 +1,8 @@
-﻿#pragma once
+﻿/// @defgroup zip64_support ZIP64 解析与占位值还原
+///
+/// Locator/Record 解出真实 64 位偏移与数量，替换 0xFFFF/0xFFFFFFFF 占位值；
+/// 触发条件与回退规则见 doc:algorithm-zip64。
+#pragma once
 #include <optional>
 #include "zip_model.hpp"
 

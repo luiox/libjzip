@@ -1,4 +1,8 @@
-﻿#pragma once
+﻿/// @defgroup zip_reader 结构化读取器（standard / jvm / naive 三策略）
+///
+/// 三策略共同产出 ZipArchive，选型契约见 doc:design-readers；JVM 路径的 EOCD
+/// 验证链与 LOC 容错见 doc:algorithm-jvm-reader。
+#pragma once
 
 #include <memory>
 #include <optional>

@@ -1,4 +1,9 @@
-﻿#pragma once
+﻿/// @defgroup zip_model ZIP 结构模型（LOC/CEN/EOCD 与归档容器）
+///
+/// 部件树与字段契约的单一事实源：ZipPart 派生族、CEN↔LOC 双向链接、JVM 语义
+/// 变体 JvmLocalFileHeader 的 ceiling 定界与 CEN 权威重对齐。
+/// 边界与重对齐契约见 doc:algorithm-scan-ceiling 与 doc:algorithm-adopt-cen。
+#pragma once
 
 #include <functional>
 #include <memory>

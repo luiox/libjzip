@@ -1,4 +1,8 @@
-﻿#pragma once
+﻿/// @defgroup memory_segment 只读字节视图（零拷贝切片）
+///
+/// 解析输入的统一视图类型：不拥有外部缓冲区，从 std::vector 构造时复制并共享
+/// 所有权；切片与偏移换算是模型各处边界检查的基础。
+#pragma once
 
 #include <memory>
 #include <vector>

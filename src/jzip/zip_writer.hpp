@@ -1,4 +1,8 @@
-﻿#pragma once
+﻿/// @defgroup zip_writer 结构化写入器（直接写回 / 重压缩）
+///
+/// DirectZipWriter 逐字保真，RecompressingZipWriter 规范化输出；写回契约
+/// （重复条目按链接写回、目录条目开关、输出配额）见 doc:design-writers。
+#pragma once
 
 #include <ostream>
 #include <vector>

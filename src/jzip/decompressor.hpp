@@ -1,4 +1,8 @@
-﻿#pragma once
+﻿/// @defgroup decompressor deflate 解压/压缩与输出配额防线
+///
+/// 敌意 JAR 的 zip 炸弹防线：defaultEntryOutputCap 按压缩大小放大并钳制上限；
+/// 需要更高配额的调用方自建 Decompressor 并 setMaxOutputSize。
+#pragma once
 
 #include <mutex>
 #include <vector>

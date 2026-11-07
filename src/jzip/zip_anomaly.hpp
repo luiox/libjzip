@@ -1,3 +1,7 @@
+/// @defgroup zip_anomaly 结构异常报告（ZipAnomalySink）
+///
+/// 读取过程的结构异常（签名缺失、映射断裂、可疑条目名等）聚合进归档，上层经
+/// sink 或 archive 自身取用；只报告，不改变解析主流程。
 #pragma once
 
 #include <cstdint>

@@ -410,6 +410,8 @@ std::unique_ptr<JvmZipReader::EndInfo> JvmZipReader::tryReadEndOfCentralDirector
                                              resolved.baseOffset});
 }
 
+// 3 层 EOCD 验证链的末环（结构验证）：候选定位与 comment 对齐检查见调用侧。
+// 验证链契约详见 doc:algorithm-eocd-validation。
 bool JvmZipReader::isValidEndHeader(const MemorySegment& data, usize endPos,
                                     u32 centralDirectorySize, u32 centralDirectoryOffset,
                                     u16 entryCount)

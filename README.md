@@ -81,7 +81,7 @@ xmake run libjzip_origintest
 ├── test/crossval/   Java/C++ 对拍工具
 ├── test_resource/   测试样本（畸形 ZIP/JAR 集合）
 ├── test_helper/     测试门面（libca.test 布局机制的薄封装）
-├── doc/             设计文档
+├── doc/             设计规格（RST，Sphinx 构建）+ 引用门禁 + Doxyfile
 └── xmake.lua        独立构建根
 ```
 
@@ -100,7 +100,11 @@ xmake run libjzip_origintest
 
 ## 深入阅读
 
-- [doc/design.md](doc/design.md)：分层架构与 reader / writer / mapper 定位
-- [doc/model.md](doc/model.md)：对象模型与 CEN↔LOC 双向链接
-- [doc/algorithm.md](doc/algorithm.md)：EOCD 验证链、扫描边界、DD 裁剪、ZIP64 算法
-- [doc/tricks.md](doc/tricks.md)：容器 trick 分类法与畸形样本挂载表
+设计文档在 `doc/`，按 mjbase 式三层分工（微观 `///` 注释 / 宏观 RST 规格 / 人读 markdown），
+RST 站以 Sphinx 构建：`pip install "sphinx==9.1.1" && sphinx-build -b html doc doc/_build`。
+
+- `doc/design.rst`：分层架构与 reader / writer / mapper 定位
+- `doc/model.rst`：对象模型与 CEN↔LOC 双向链接
+- `doc/algorithm.rst`：EOCD 验证链、扫描边界、DD 收敛、ZIP64 算法
+- `doc/tricks.rst`：容器 trick 分类法与畸形样本挂载表
+- API 级契约：`doxygen doc/Doxyfile` 生成的微观层站点 + 头文件 `///` 注释

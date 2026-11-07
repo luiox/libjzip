@@ -1,3 +1,7 @@
+/// @defgroup zip_adapting_reader 委托 ca::zip 的适配读取器
+///
+/// AdaptingZipReader 把 ca::zip::ZipFile 的 stdlib 风格读取适配成结构化模型，
+/// 条目解压为 method=stored 的干净结构；桥接点说明见 doc:design-zip-layer。
 #pragma once
 
 #include <string>

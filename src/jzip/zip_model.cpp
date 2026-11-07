@@ -681,6 +681,7 @@ void JvmLocalFileHeader::readFileData(const MemorySegment& data, usize headerOff
     // Find ceiling: 首个不早于数据起点的头部偏移（对齐 Java offset 的 ceiling）。
     // 不能用 upper_bound：零长度条目的数据起点恰好等于下一个头部偏移，
     // upper_bound 会跳过它，把后续结构算进本条目的 fileData。
+    // 边界契约详见 doc:algorithm-scan-ceiling。
     // Shared ptr avoids copying the full set (70k entries) per LocalFileHeader.
     usize data_end = data.byteSize();
     if (offsets_) {
@@ -755,6 +756,7 @@ void JvmLocalFileHeader::adoptLinkedCentralDirectoryValues()
     // 结论是本条目无数据。前向扫描可能把邻接的下一个结构（LFH/CEN）或数据
     // 描述符字节算进本条目 fileData，这里不能提前返回留下与 CEN 矛盾的内容，
     // 强制对齐为空，保持 getFileData() 与 CEN 大小自洽。
+    // 重对齐契约详见 doc:algorithm-adopt-cen。
     const i64 fileDataLength = getExplicitFileDataLength();
     if (fileDataLength < 0) {
         setFileData({});
