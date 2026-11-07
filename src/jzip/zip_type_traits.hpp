@@ -1,3 +1,6 @@
+/// @defgroup zip_type_traits 无 RTTI 类型分派
+///
+/// ZipPart 子类经 type() 枚举区分，TypeOf 特化供 ca::core::tag_cast 使用。
 #pragma once
 
 #include "libca/core/tag_cast.hpp"

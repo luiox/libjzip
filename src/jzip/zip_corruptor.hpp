@@ -1,3 +1,7 @@
+/// @defgroup zip_corruptor 归档损坏注入器（测试造数）
+///
+/// 从干净归档制造已知损坏形态，服务结构异常侦测回归与下游容错测试；形态与
+/// doc:tricks 的容器 trick 分类对齐。
 #pragma once
 
 #include <functional>

@@ -26,6 +26,6 @@
 
 以下不算漏洞：
 
-- `doc/algorithm.md` 记录的容错边界：reader 按 JVM / CEN 语义接受某些畸形结构，这是有意的设计取舍
+- `doc/algorithm.rst` 记录的容错边界：reader 按 JVM / CEN 语义接受某些畸形结构，这是有意的设计取舍
 - stored(0) / deflate(8) 之外的压缩方式不支持，入口直接抛 `ZipParseException`
 - 解压配额默认值（min(1 GiB, 压缩大小 × 1000)，下限 1 MiB）本身；除非能证明配额计算可被绕过
