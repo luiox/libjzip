@@ -99,6 +99,22 @@ TEST(LibJzipDecompressionTest, UnknownMethodReturnsError)
     EXPECT_THROW(ZipIO::decompressLocalFile(local), ZipParseException);
 }
 
+// 无流字节的 DEFLATED 条目（空负载）：内容语义为空，与 STORED 直通一致，
+// 不进 zlib——Z_BUF_ERROR 异常通道只留给非零长的敌意流。
+TEST(LibJzipDecompressionTest, DeflatedEmptyPayloadReturnsEmpty)
+{
+    LocalFileHeader local;
+    local.setFileName("empty.bin");
+    local.setGeneralPurposeBitFlag(0);
+    local.setCompressionMethod(8);
+    local.setCrc32(0);
+    local.setCompressedSize(0);
+    local.setUncompressedSize(0);
+    local.setFileData({});
+
+    EXPECT_TRUE(ZipIO::decompressLocalFile(local).empty());
+}
+
 // ---- opt-in 解压输出上限（敌意 JAR 批量扫描场景）----
 
 namespace {
