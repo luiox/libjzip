@@ -15,8 +15,13 @@ libjzip 数据模型与类关系
    zip_model.hpp       ZIP 结构模型
    zip_writer.hpp      结构化写入器
    zip_mapper.hpp      结构映射器
+   zip_adapting_reader.hpp  委托 ca::zip 的适配读取器
    decompressor.hpp    解压与压缩
    memory_segment.hpp  只读字节视图
+   zip_anomaly.hpp     结构异常报告（ZipAnomalySink）
+   zip64_support.hpp   ZIP64 字段解析
+   zip_corruptor.hpp   归档损坏注入器（测试造数）
+   zip_type_traits.hpp 无 RTTI 类型分派
 
 .. _model-interfaces:
 

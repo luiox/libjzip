@@ -125,10 +125,10 @@ EOCD 结构（固定 22 字节 + 注释）：
 
 算法流程：
 
-1. 正向扫描 ``0x06054b50`` 签名（``indexOfQuad`` 从偏移 0 开始）；找不到则抛 ``No Central-Directory-File-Header found``。
-2. 解码 ``EndOfCentralDirectory``；``Zip64Support::resolveEnd`` 获取 ``centralDirectoryStart`` / ``centralDirectoryEnd``。
+1. 正向扫描 ``0x06054b50`` 签名（``indexOfQuad`` 从偏移 0 开始）；找不到则抛 ``EOCD signature not found``。
+2. 解码 ``EndOfCentralDirectory``；``Zip64Support::resolveEndOfCentralDirectory`` 获取 ``centralDirectoryStart`` / ``centralDirectoryEnd``。
 3. 在 ``[start, end)`` 内循环读取 CEN：签名必须为 ``0x02014b50``，解码 ``CentralDirectoryFileHeader`` 并加入 archive。
-4. 遍历所有 CEN：计算 ``baseOffset + relativeOffsetOfLocalHeader`` 得到 LOC 偏移； TreeSet 去重后验证 LOC 签名 ``0x04034b50``，不匹配则记录警告、跳过 LOC 链接； 匹配则解码 ``LocalFileHeader``，建立 CEN-LOC 双向链接，加入 archive。
+4. 遍历所有 CEN：计算 ``baseOffset + relativeOffsetOfLocalHeader`` 得到 LOC 偏移； 集合去重后验证 LOC 签名 ``0x04034b50``，不匹配则记录异常、跳过 LOC 链接； 匹配则解码 ``LocalFileHeader``，建立 CEN-LOC 双向链接，加入 archive。
 5. 首个 LOC 偏移 > 0 时记录前缀数据。
 6. ``OffsetComparator`` 排序。
 
@@ -151,7 +151,7 @@ EOCD 结构（固定 22 字节 + 注释）：
 
 算法全流程（``JvmZipReader.read`` 分 5 个阶段，细节算法见下方各小节）：
 
-1. **Phase 1 — EOCD 查找与验证**：从尾部 ``65535+22`` 字节窗口反向扫描 ``0x06054b50``，收集所有候选 EOCD；对每个候选执行 ``isValidEndHeader`` （comment_length 对齐文件尾则直接接受，否则做结构验证：CEN 签名 / LOC 签名 / NameLen 一致性），选第一个通过的候选；全部失败则抛 ``No valid EOCD found``。
+1. **Phase 1 — EOCD 查找与验证**：从尾部 ``65535+22`` 字节窗口反向扫描 ``0x06054b50``，收集所有候选 EOCD；对每个候选执行 ``isValidEndHeader`` （comment_length 对齐文件尾则直接接受，否则做结构验证：CEN 签名 / LOC 签名 / NameLen 一致性），选第一个通过的候选；全部失败则抛 ``No valid End-Of-Central-Directory found!``。
 2. **Phase 2 — CEN 严格解析**：在 ``[centralDirectoryStart, centralDirectoryEnd)`` 内循环解码 ``CentralDirectoryFileHeader``；消耗后必须精确匹配 ``centralDirectoryEnd``，否则抛 ``CEN 边界不一致``。
 3. **Phase 3 — baseOffset 确定与回退**：计算 ``jvmBaseFileOffset = endInfo.baseOffset``；若 ``hasAnyLinkedLocalHeader`` 失败，先试偏移 0 处 LOC 签名（快速路径），再前向扫描 PK 签名（慢速路径）以更新 baseOffset。
 4. **Phase 4 — LOC 解析**：填充 ``entryOffsets`` 排序集（含所有签名校验通过的 CEN→LOC 映射偏移、``earliestCdfh``、EOCD 偏移），遍历 CEN 计算绝对 LOC 偏移； 去重 + LOC 签名校验；通过 ``JvmZipPartAllocator`` 分配 ``JvmLocalFileHeader`` 并 ``setOffsets(entryOffsets)``；从字节读取 LOC（异常静默捕获）→ CEN-LOC 双向 链接 → ``adoptLinkedCentralDirectoryValues`` → 加入 archive。
@@ -223,7 +223,10 @@ JVM 信任 CEN 而非 LOC。解析 LOC 后，``adoptLinkedCentralDirectoryValues
    * - ``fileName``
      - 从 CEN 复制
    * - ``extraField``
-     - 从 CEN 复制 + 追加 CEN extra 字段（同名 tag 不重复）
+     - 不在覆盖之列：``JvmLocalFileHeader`` 保留 LOC 原值；基类
+       ``LocalFileHeader``\（``CentralAdoptingMapper`` 场景）整体替换为 CEN
+       extra。同名 tag 去重的追加合并走 ForwardScan 读入路径的
+       ``appendExtraFieldsFromCen``，只改解析列表、不改 raw 字节
    * - **文件数据切片**
      - 按 CEN 的权威大小重对齐：stored 取 ``uncompressedSize``，其余取
        ``compressedSize``
