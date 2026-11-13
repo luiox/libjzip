@@ -100,7 +100,7 @@ TEST(LibJzipDecompressionTest, UnknownMethodReturnsError)
 }
 
 // 无流字节的 DEFLATED 条目（空负载）：内容语义为空，与 STORED 直通一致，
-// 不进 zlib——Z_BUF_ERROR 异常通道只留给非零长的敌意流。
+// 不进 zlib，Z_BUF_ERROR 异常通道只留给非零长的敌意流。
 TEST(LibJzipDecompressionTest, DeflatedEmptyPayloadReturnsEmpty)
 {
     LocalFileHeader local;
@@ -156,7 +156,7 @@ TEST(LibJzipDecompressionTest, MaxOutputSizeRejectsOversizedPayload)
     EXPECT_THROW(capped.decompress(local, segment), ZipParseException);
 }
 
-// 头部声明虚高（实际产出很小）：上限只钳预分配，产出照常成功——
+// 头部声明虚高（实际产出很小）：上限只钳预分配，产出照常成功，
 // 旧实现会按声明值直接预分配，敌意声明即 DoS。
 TEST(LibJzipDecompressionTest, MaxOutputSizeClampsLyingDeclaredSizeWithoutFailingSmallOutput)
 {

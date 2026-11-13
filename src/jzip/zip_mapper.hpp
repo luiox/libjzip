@@ -1,7 +1,7 @@
-﻿/// @defgroup zip_mapper 结构映射器（含映射链生命周期约束）
+/// @defgroup zip_mapper 结构映射器（含映射链生命周期约束）
 ///
 /// 单一映射点 map(archive, part)，委派链先内层后外层；CopyingZipPartMapper
-/// 必须位于链末端——深拷贝不保留 LOC/CEN 互链。
+/// 必须位于链末端，深拷贝不保留 LOC/CEN 互链。
 #pragma once
 
 #include "zip_model.hpp"

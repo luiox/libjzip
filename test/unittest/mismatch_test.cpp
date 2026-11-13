@@ -1,5 +1,5 @@
 /*
- * Mismatch detection tests — C++ extension, no direct Java equivalent.
+ * Mismatch detection tests: C++ extension, no direct Java equivalent.
  * Tests local/central field mismatch detection via hasDifferentValuesThanCentralDirectoryHeader().
  * Core behavior tested in PartParseTests.testLocalHeaderDetectMismatch;
  * these provide additional sample coverage.

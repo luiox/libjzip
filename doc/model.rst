@@ -125,7 +125,7 @@ C++ 简化了继承链，三个 reader 均直接实现 ``ZipReader`` 接口（Ja
    ├── JvmZipPartAllocator         生产 JvmLocalFileHeader
    └── DelegatingZipPartAllocator
 
-``JvmZipPartAllocator`` 与 ``JvmZipReader`` 配对——它生产 ``JvmLocalFileHeader``， 后者重写了 ``readFileData()`` 方法以实现「扫描到下一个头」语义。
+``JvmZipPartAllocator`` 与 ``JvmZipReader`` 配对，它生产 ``JvmLocalFileHeader``， 后者重写了 ``readFileData()`` 方法以实现扫描到下一个头语义。
 
 .. _model-mapper:
 

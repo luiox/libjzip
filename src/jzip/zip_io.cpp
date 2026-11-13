@@ -100,7 +100,7 @@ std::vector<u8> ZipIO::decompressLocalFile(const LocalFileHeader& local)
 }
 
 // 对存档中每个元素应用映射器（如 CentralAdoptingMapper）
-// 注意：分两阶段执行 —— 先计算映射结果，再移动元素。
+// 注意：分两阶段执行，先计算映射结果，再移动元素。
 // 这是因为 mapper.map() 内部可能自己迭代 archive.getParts()，
 // 如果在第一阶段就 move 元素会导致内部迭代遇到 null unique_ptr 而崩溃。
 ZipArchive ZipIO::mapArchive(ZipArchive archive, const ZipPartMapper& mapper)

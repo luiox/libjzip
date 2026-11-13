@@ -2,27 +2,20 @@
 
 对齐 JVM 容错语义的 ZIP/JAR 结构化读写库：畸形样本容忍、结构保留、可控写回（C++17 / xmake）。
 
-C++17 实现的 [LL-Java-Zip](https://github.com/Col-E/LL-Java-Zip) 结构化 ZIP/JAR 模型，
-面向 JVM 字节码工具链的 JAR 读写底层场景，作为独立库长期维护。
+C++17 实现的 [LL-Java-Zip](https://github.com/Col-E/LL-Java-Zip) 结构化 ZIP/JAR 模型，面向 JVM 字节码工具链的 JAR 读写底层场景，作为独立库长期维护。
 
 ## 特性
 
-- **畸形样本容忍**：拼接（concat）、junk header、重复目录项、data descriptor、ZIP64、
-  前缀垃圾等 JVM 现实样本均可读取，歧义处以 JVM / CEN 语义为准
-- **结构保留**：`LOC / CEN / EOCD / 前缀数据` 全量建模，保留重复 entry、原始压缩方式
-  与字节布局——不是只把内容解包出来
+- **畸形样本容忍**：拼接（concat）、junk header、重复目录项、data descriptor、ZIP64、前缀垃圾等 JVM 现实样本均可读取，歧义处以 JVM / CEN 语义为准
+- **结构保留**：`LOC / CEN / EOCD / 前缀数据` 全量建模，保留重复 entry、原始压缩方式与字节布局，不是只把内容解包出来
 - **可控写回**：按模型直接重写原始结构，或解压后重压缩成干净归档
-- **三种读取策略**：standard（前向规范扫描）/ jvm（反向 EOCD + CEN 权威收养）/
-  naive（只扫 LOC 兜底），读取过程产出结构异常报告（`ZipAnomalySink`）
-- **解压防线**：每条目输出配额默认生效，敌意 JAR 批量扫描场景防 zip 炸弹，
-  可按需 opt-in 更高上限
+- **三种读取策略**：standard（前向规范扫描）/ jvm（反向 EOCD + CEN 权威收养）/ naive（只扫 LOC 兜底），读取过程产出结构异常报告（`ZipAnomalySink`）
+- **解压防线**：每条目输出配额默认生效，敌意 JAR 批量扫描场景防 zip 炸弹，可按需 opt-in 更高上限
 - **纯内存结构库**：字节进出、不做文件 IO；文件路径读取委托 libca 的 `ca::zip`
 
 ## 快速开始
 
-依赖 [xmake](https://xmake.io)（≥ 3.0）。先注册
-[luiox-repo](https://github.com/luiox/luiox-repo)（libjzip 及其依赖 libca 均为该仓库的
-git 直连包）：
+依赖 [xmake](https://xmake.io)（≥ 3.0）。先注册 [luiox-repo](https://github.com/luiox/luiox-repo)（libjzip 及其依赖 libca 均为该仓库的 git 直连包）：
 
 ```sh
 xmake repo --add luiox-repo https://github.com/luiox/luiox-repo.git
@@ -100,8 +93,7 @@ xmake run libjzip_origintest
 
 ## 深入阅读
 
-设计文档在 `doc/`，按 mjbase 式三层分工（微观 `///` 注释 / 宏观 RST 规格 / 人读 markdown），
-RST 站以 Sphinx 构建：`pip install "sphinx==9.1.1" && sphinx-build -b html doc doc/_build`。
+设计文档在 `doc/`，按 mjbase 式三层分工（微观 `///` 注释 / 宏观 RST 规格 / 人读 markdown）， RST 站以 Sphinx 构建：`pip install "sphinx==9.1.1" && sphinx-build -b html doc doc/_build`。
 
 - `doc/design.rst`：分层架构与 reader / writer / mapper 定位
 - `doc/model.rst`：对象模型与 CEN↔LOC 双向链接
