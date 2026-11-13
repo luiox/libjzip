@@ -93,7 +93,7 @@ EOCD 结构（固定 22 字节 + 注释）：
      - 不需要
    * - LOC 数据读取
      - 使用 LOC 字段的 compressed_size
-     - 用「扫描到下一个头」方式 + CEN 覆盖
+     - 用扫描到下一个头方式 + CEN 覆盖
      - 仅 LOC
    * - baseOffset 回退
      - 不需要
@@ -118,7 +118,7 @@ EOCD 结构（固定 22 字节 + 注释）：
 
 .. _algorithm-forward-scan:
 
-2.1 ForwardScanZipReader — 正向扫描读取器
+2.1 ForwardScanZipReader: 正向扫描读取器
 -----------------------------------------
 
 **定位**：标准 ZIP 文件解析，按 ZIP 规范布局顺序（LOC→CEN→END）正向扫描。
@@ -144,18 +144,18 @@ EOCD 结构（固定 22 字节 + 注释）：
 
 .. _algorithm-jvm-reader:
 
-2.2 JvmZipReader — JVM 语义读取器
+2.2 JvmZipReader: JVM 语义读取器
 ---------------------------------
 
 **定位**：模拟 HotSpot JVM 的 ``java.util.zip.ZipFile`` 行为，是最复杂、最健壮的 读取器。设计目标是：在**不信任**的/伪造的 ZIP 文件上尽可能恢复数据。
 
 算法全流程（``JvmZipReader.read`` 分 5 个阶段，细节算法见下方各小节）：
 
-1. **Phase 1 — EOCD 查找与验证**：从尾部 ``65535+22`` 字节窗口反向扫描 ``0x06054b50``，收集所有候选 EOCD；对每个候选执行 ``isValidEndHeader`` （comment_length 对齐文件尾则直接接受，否则做结构验证：CEN 签名 / LOC 签名 / NameLen 一致性），选第一个通过的候选；全部失败则抛 ``No valid End-Of-Central-Directory found!``。
-2. **Phase 2 — CEN 严格解析**：在 ``[centralDirectoryStart, centralDirectoryEnd)`` 内循环解码 ``CentralDirectoryFileHeader``；消耗后必须精确匹配 ``centralDirectoryEnd``，否则抛 ``CEN 边界不一致``。
-3. **Phase 3 — baseOffset 确定与回退**：计算 ``jvmBaseFileOffset = endInfo.baseOffset``；若 ``hasAnyLinkedLocalHeader`` 失败，先试偏移 0 处 LOC 签名（快速路径），再前向扫描 PK 签名（慢速路径）以更新 baseOffset。
-4. **Phase 4 — LOC 解析**：填充 ``entryOffsets`` 排序集（含所有签名校验通过的 CEN→LOC 映射偏移、``earliestCdfh``、EOCD 偏移），遍历 CEN 计算绝对 LOC 偏移； 去重 + LOC 签名校验；通过 ``JvmZipPartAllocator`` 分配 ``JvmLocalFileHeader`` 并 ``setOffsets(entryOffsets)``；从字节读取 LOC（异常静默捕获）→ CEN-LOC 双向 链接 → ``adoptLinkedCentralDirectoryValues`` → 加入 archive。
-5. **Phase 5 — 收尾**：记录 ``prefixData``，``OffsetComparator`` 排序。
+1. **Phase 1: EOCD 查找与验证**：从尾部 ``65535+22`` 字节窗口反向扫描 ``0x06054b50``，收集所有候选 EOCD；对每个候选执行 ``isValidEndHeader`` （comment_length 对齐文件尾则直接接受，否则做结构验证：CEN 签名 / LOC 签名 / NameLen 一致性），选第一个通过的候选；全部失败则抛 ``No valid End-Of-Central-Directory found!``。
+2. **Phase 2: CEN 严格解析**：在 ``[centralDirectoryStart, centralDirectoryEnd)`` 内循环解码 ``CentralDirectoryFileHeader``；消耗后必须精确匹配 ``centralDirectoryEnd``，否则抛 ``CEN 边界不一致``。
+3. **Phase 3: baseOffset 确定与回退**：计算 ``jvmBaseFileOffset = endInfo.baseOffset``；若 ``hasAnyLinkedLocalHeader`` 失败，先试偏移 0 处 LOC 签名（快速路径），再前向扫描 PK 签名（慢速路径）以更新 baseOffset。
+4. **Phase 4: LOC 解析**：填充 ``entryOffsets`` 排序集（含所有签名校验通过的 CEN→LOC 映射偏移、``earliestCdfh``、EOCD 偏移），遍历 CEN 计算绝对 LOC 偏移； 去重 + LOC 签名校验；通过 ``JvmZipPartAllocator`` 分配 ``JvmLocalFileHeader`` 并 ``setOffsets(entryOffsets)``；从字节读取 LOC（异常静默捕获）→ CEN-LOC 双向 链接 → ``adoptLinkedCentralDirectoryValues`` → 加入 archive。
+5. **Phase 5: 收尾**：记录 ``prefixData``，``OffsetComparator`` 排序。
 
 .. _algorithm-eocd-validation:
 
@@ -185,14 +185,14 @@ EOCD 结构（固定 22 字节 + 注释）：
 
 .. _algorithm-scan-ceiling:
 
-2.2.3 「扫描到下一个头」文件数据读取
+2.2.3 扫描到下一个头文件数据读取
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``JvmLocalFileHeader`` 的核心设计——不信任 LOC 的 ``compressedSize``/``uncompressedSize``。数据边界按 C++ 实现的契约执行：
+``JvmLocalFileHeader`` 的核心设计，不信任 LOC 的 ``compressedSize``/``uncompressedSize``。数据边界按 C++ 实现的契约执行：
 
 1. 用**原始 LOC 字段**长度计算数据起始（``30 + fileNameLength + extraFieldLength``， 保存于 LOC 解析时，避免被后续 CEN 覆盖污染）：``dataStart = headerOffset + localDataOffset``；越界即抛 ``local file data offset out of range``。
-2. 在 ``entryOffsets`` 排序集中查找**首个不早于** ``dataStart`` 的偏移（ceiling， 对齐 Java ``TreeSet.ceiling``；不能用严格大于——零长度条目的数据起点恰好等于 下一个头部偏移时会跳过它，把后续结构算进本条目数据）。找不到则到文件尾。 ``dataEnd`` 即该 ceiling 值。
-3. bit 3（data descriptor）置位且显式大小可用（stored 取 ``uncompressedSize``， 其余取 ``compressedSize``；要求 > 0）时，若显式大小落在 ``[dataStart, dataEnd]`` 内，把 ``dataEnd`` 收敛为 ``dataStart + explicitSize``——DD 字节与后续结构留在 数据区外。
+2. 在 ``entryOffsets`` 排序集中查找**首个不早于** ``dataStart`` 的偏移（ceiling， 对齐 Java ``TreeSet.ceiling``；不能用严格大于，零长度条目的数据起点恰好等于 下一个头部偏移时会跳过它，把后续结构算进本条目数据）。找不到则到文件尾。 ``dataEnd`` 即该 ceiling 值。
+3. bit 3（data descriptor）置位且显式大小可用（stored 取 ``uncompressedSize``， 其余取 ``compressedSize``；要求 > 0）时，若显式大小落在 ``[dataStart, dataEnd]`` 内，把 ``dataEnd`` 收敛为 ``dataStart + explicitSize``，DD 字节与后续结构留在 数据区外。
 4. 切片 ``data[dataStart, dataEnd]`` 作为 fileData；STORED 按实际数据长度回填 ``compressedSize``/``uncompressedSize``，其余按实际数据长度回填 ``compressedSize``。
 
 .. _algorithm-adopt-cen:
@@ -233,7 +233,7 @@ JVM 信任 CEN 而非 LOC。解析 LOC 后，``adoptLinkedCentralDirectoryValues
 
 数据切片重对齐规则：
 
-- CEN 权威大小为 0：**强制对齐为空数据**——fileData 清空、数据区间收敛到起点、 ``foundData_`` 置假。前向扫描可能把邻接的下一个结构（LFH/CEN）或数据描述符字节 算进本条目，权威大小为 0 时不能保留这些垃圾，模型必须与 CEN 大小自洽。
+- CEN 权威大小为 0：**强制对齐为空数据**，fileData 清空、数据区间收敛到起点、 ``foundData_`` 置假。前向扫描可能把邻接的下一个结构（LFH/CEN）或数据描述符字节 算进本条目，权威大小为 0 时不能保留这些垃圾，模型必须与 CEN 大小自洽。
 - CEN 权威大小 > 0：满足重对齐条件（未找到数据 / bit 3 置位 / 现有 fileData 长度 与权威大小不符）且数据起点边界可容纳时，按权威大小重切片并收敛数据区间。
 - CEN 权威大小不可用或越界放不下：保留扫描结果不动。
 
@@ -241,7 +241,7 @@ JVM 信任 CEN 而非 LOC。解析 LOC 后，``adoptLinkedCentralDirectoryValues
 
 .. _algorithm-naive:
 
-2.3 NaiveLocalFileZipReader — 朴素读取器
+2.3 NaiveLocalFileZipReader: 朴素读取器
 ----------------------------------------
 
 **定位**：最简单的读取器，只用 LOC 签名，完全不依赖 EOCD 和 CEN。
@@ -261,7 +261,7 @@ JVM 信任 CEN 而非 LOC。解析 LOC 后，``adoptLinkedCentralDirectoryValues
 3. 写入策略
 -----------
 
-3.1 DirectZipWriter — 直接写入器
+3.1 DirectZipWriter: 直接写入器
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 将 ``ZipArchive`` 的模型字段逐字写出，不做重压缩。流程：遍历 ``LocalFileHeader`` 写 LOC（签名 + 固定字段 + 文件名 + extra + 文件数据）；遍历 ``CentralDirectoryFileHeader`` 写 CEN（签名 + 固定字段 + 文件名 + extra + 注释）； ``End`` 存在时写 EOCD。
@@ -274,7 +274,7 @@ JVM 信任 CEN 而非 LOC。解析 LOC 后，``adoptLinkedCentralDirectoryValues
 - LOC 和 CEN 的 ``relativeOffsetOfLocalHeader`` 必须提前正确
 - 常用于调试/测试，或需要逐字复制的场景
 
-3.2 RecompressingZipWriter — 重压缩写入器
+3.2 RecompressingZipWriter: 重压缩写入器
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 解压后重新压缩成新 ZIP，始终产出标准结构：遍历条目，fileData 非空时先解压再写入 压缩流；零字节普通文件照常写出；``createDirectoryEntries`` 控制名字以 ``/`` 结尾 的目录条目是否保留。
@@ -448,7 +448,7 @@ CEN→LOC 映射的回退（``Zip64Support::getRelativeOffsetOfLocalHeader``）�
 - LOC 解码越界（所有 reader）
 - 文件数据边界检查失败
 
-**JvmZipReader 的特殊容错**：个别 LOC 解码失败被静默捕获，随后 ``adoptLinkedCentralDirectoryValues`` 用 CEN 字段覆盖修复，数据成功恢复——LOC 字段损坏不阻断整包读取。
+**JvmZipReader 的特殊容错**：个别 LOC 解码失败被静默捕获，随后 ``adoptLinkedCentralDirectoryValues`` 用 CEN 字段覆盖修复，数据成功恢复，LOC 字段损坏不阻断整包读取。
 
 .. _algorithm-principles:
 
@@ -458,5 +458,5 @@ CEN→LOC 映射的回退（``Zip64Support::getRelativeOffsetOfLocalHeader``）�
 1. **CEN 权威**：Central Directory 是元数据的权威来源，LOC 的字段可以有偏差
 2. **JVM 行为为准**：遇到歧义时，以 ``java.util.zip.ZipFile`` 的行为为准
 3. **反向 EOCD**：从文件末尾反向扫描，而非正向
-4. **ceiling 定界**：JVM 路径的数据边界由「下一个已知偏移的 ceiling」确定， bit 3 且显式大小可用时把 DD 收敛在数据区外；不信任 LOC 的 size 字段
+4. **ceiling 定界**：JVM 路径的数据边界由下一个已知偏移的 ceiling确定， bit 3 且显式大小可用时把 DD 收敛在数据区外；不信任 LOC 的 size 字段
 5. **容错性**：容忍 leading/trailing garbage、偏移偏差、zero-length locals、 尾部斜杠类名

@@ -18,7 +18,7 @@ libjzip 设计文档
 这两层不是重复实现，而是不同抽象层级：
 
 - ``jzip`` 关心 ``LOC / CEN / EOCD / data descriptor / ZIP64 / prefix junk``
-- ``zip`` 关心「按 entry 读写内容」
+- ``zip`` 关心按 entry 读写内容
 
 ``jzip`` 的 ``AdaptingZipReader`` 直接委托 ``ca::zip::ZipFile``，把结构化模型适配到 简单接口语义（见本文 §8）。
 
@@ -79,7 +79,7 @@ libjzip 设计文档
 ``zip_reader.hpp`` 里有三种 reader：
 
 ``ForwardScanZipReader``
-   适合标准 ZIP。按常规布局顺序找 EOCD 和 CEN。行为更接近「规范 ZIP」，对 trick 样本容忍度不如 JVM reader。
+   适合标准 ZIP。按常规布局顺序找 EOCD 和 CEN。行为更接近规范 ZIP，对 trick 样本容忍度不如 JVM reader。
 
 ``JvmZipReader``
    本仓默认最重要的 reader，目标是贴近 JVM/libzip 的现实行为：
@@ -87,7 +87,7 @@ libjzip 设计文档
    - 从文件尾反向找 EOCD - 支持 base offset 回退和 CEN/LOC 重新链接 - 遇到字段不一致时更偏向以 CEN 为权威 - 适合 JAR、拼接归档、畸形样本
 
 ``NaiveLocalFileZipReader``
-   只扫 LOC，不依赖 CEN 和 EOCD。适合调试、极端损坏样本的兜底读取、验证 「只看 local headers 能读到什么」。
+   只扫 LOC，不依赖 CEN 和 EOCD。适合调试、极端损坏样本的兜底读取、验证 只看 local headers 能读到什么。
 
 .. _design-writers:
 

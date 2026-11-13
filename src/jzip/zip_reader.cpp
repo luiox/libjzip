@@ -376,7 +376,7 @@ std::unique_ptr<JvmZipReader::EndInfo> JvmZipReader::tryReadEndOfCentralDirector
 
     // 对标 Java：先解析 ZIP64 拿到真实 CEN 边界，再做结构验证
     // 注意：Java 把 isValidEndHeader 的 endPos 传为 resolvedEnd.centralDirectoryEnd()，
-    // 不是 EOCD 起始位置 — 这在 Zip64 下两者不同（ZIP64 EOCD 记录介于传统 EOCD 与 CEN 之间）
+    // 不是 EOCD 起始位置，这在 Zip64 下两者不同（ZIP64 EOCD 记录介于传统 EOCD 与 CEN 之间）
     auto resolved = Zip64Support::resolveEndOfCentralDirectory(data, *end);
 
     // 对标 Java：检查 ZIP64 entry count 是否超出 i32 范围
@@ -698,7 +698,7 @@ void JvmZipReader::read(ZipArchive& archive, const MemorySegment& data)
                 localReadOk = true;
             }
             catch (...) {
-                // Suppress — CEN adoption will repair
+                // Suppress: CEN adoption will repair
                 emit(archive, ZipAnomalyKind::LocalHeaderReadFailed, localOffset, entryName,
                      "LOC parse failed; repaired via CEN adoption");
             }

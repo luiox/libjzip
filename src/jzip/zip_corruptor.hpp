@@ -44,7 +44,7 @@ public:
     // ── 字节级 ────────────────────────────────────────────────
 
     /// @brief 前置垃圾数据（默认 CAFEBABE 魔数平铺），并保持 EOCD 的 cdOffset
-    /// 声明值为加垃圾前的旧值——即"陈旧 cdOffset"，OS3.0.0H crasher 形态。
+    /// 声明值为加垃圾前的旧值，即"陈旧 cdOffset"，OS3.0.0H crasher 形态。
     /// @param size 垃圾字节数
     /// @param magic 垃圾头部魔数（平铺填充）
     ZipCorruptor& prependJunk(ca::usize size, const std::string& magic = "\xCA\xFE\xBA\xBE");

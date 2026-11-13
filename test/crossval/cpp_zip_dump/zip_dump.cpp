@@ -36,7 +36,7 @@ static void dumpZipFile(std::ofstream& out, const fs::path& samplePath)
     ca::zip::ZipFile zf;
     // libca 0.0.9 [不兼容]：open 异常改 ca::Result<void, ZipErrorInfo>，
     // 原 try/catch 成死代码且损坏输入静默产出 ENTRY_COUNT: 0（R16 评审 F3
-    // 探针实证）；恢复头行失败标记语义——open 失败直接返回。
+    // 探针实证）；恢复头行失败标记语义，open 失败直接返回。
     if (zf.open(bytes).is_err()) {
         return;
     }

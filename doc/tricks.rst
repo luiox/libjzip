@@ -3,7 +3,7 @@
 ZIP/JAR 容器 trick 分类法
 =========================
 
-状态：定稿。本文件是 **libjzip 的容器威胁知识库**：定义 JAR/ZIP 容器层「可被动手脚 的点」如何分类、如何识别、如何防御，并用 libjzip 的 ``test_resource/`` 样本作为 实例。其他基于 libjzip 的上层项目在容器层遇到同类问题时，**不要另起一套术语**， 直接引用本文件的分类法，把自己项目里遇到的样本挂到对应分类下。类关系见 :doc:`model`，读写算法见 :doc:`algorithm`。
+状态：定稿。本文件是 **libjzip 的容器威胁知识库**：定义 JAR/ZIP 容器层可被动手脚 的点如何分类、如何识别、如何防御，并用 libjzip 的 ``test_resource/`` 样本作为 实例。其他基于 libjzip 的上层项目在容器层遇到同类问题时，**不要另起一套术语**， 直接引用本文件的分类法，把自己项目里遇到的样本挂到对应分类下。类关系见 :doc:`model`，读写算法见 :doc:`algorithm`。
 
 1. 这份文档解决什么
 -------------------
@@ -31,7 +31,7 @@ JAR 就是 ZIP 加语义约定。混淆器/恶意 jar 会在**容器元数据**�
      - 遇到容器异常先查 §3 对号入座；确认是新 trick 再在 §3 追加分类，并把自产
        样本记到自己的文档（引用 §N）
    * - 写回/导出方
-     - §3 每个 trick 附「对写回的影响」，防止丢数据（见 §6 检查清单）
+     - §3 每个 trick 附对写回的影响，防止丢数据（见 §6 检查清单）
 
 .. _tricks-threat-model:
 
@@ -62,11 +62,11 @@ ZIP/JAR 有四种元数据载体，可信度完全不同：
    * - EOCD
      - CEN 偏移/大小/条目数
      - 低
-     - 可被改写成「0 条目」或指向别处
+     - 可被改写成0 条目或指向别处
    * - 文件数据区
      - 条目内容
      - 中
-     - 边界靠「扫描到下一个头」而非 LOC 字段
+     - 边界靠扫描到下一个头而非 LOC 字段
 
 2.2 攻击面总览
 ^^^^^^^^^^^^^^
@@ -86,7 +86,7 @@ ZIP/JAR 有四种元数据载体，可信度完全不同：
    * - 2
      - EOCD
      - 声明 0 条目 / 0 偏移 / 越界 / 掺入垃圾签名
-     - 目录枚举被欺骗，条目「消失」
+     - 目录枚举被欺骗，条目消失
    * - 3
      - LOC 大小字段
      - 写成 0 / 虚假大小 / 与 CEN 不一致
@@ -136,7 +136,7 @@ T02 EOCD 欺骗
 
 - **特征**：EOCD 声称 0 条目、0 偏移、越界偏移，或垃圾区里藏着伪造 EOCD 签名。
 - **识别**：``centralDirectoryStart/End`` 与 CEN 内容对不上；EOCD 之前有不在 CEN 范围内的数据。
-- **防御**：不能直接信 EOCD 字段。JVM 做法是 3 层验证链——候选定位 → comment 对齐 检查 → 结构验证（CEN 签名 / 首个 LOC 签名 / fileNameLength 一致性），全过才接受。
+- **防御**：不能直接信 EOCD 字段。JVM 做法是 3 层验证链，候选定位 → comment 对齐 检查 → 结构验证（CEN 签名 / 首个 LOC 签名 / fileNameLength 一致性），全过才接受。
 - **对写回的影响**：EOCD 声称 0 条目不代表归档是空的；按 EOCD 条目数跳过会导致整包 丢失。
 
 T03 LOC 大小字段造假（0-length / 越界）
@@ -144,7 +144,7 @@ T03 LOC 大小字段造假（0-length / 越界）
 
 - **特征**：LOC 的 ``compressedSize``/``uncompressedSize`` 是 0 或虚假值，CEN 却有 真实数据；或数据区越界到别的头。
 - **识别**：LOC 与 CEN 的 size 字段不一致 （``hasDifferentValuesThanCentralDirectoryHeader``）；按 LOC size 切片读出来是 垃圾或越界。
-- **防御**：不信任 LOC 的 size。JVM 语义用「扫描到下一个头」确定数据边界（数据起点 在已知偏移排序集里的 ceiling，:ref:`algorithm-scan-ceiling`），再用 CEN 权威大小 重对齐、权威大小为 0 时强制空数据（:ref:`algorithm-adopt-cen`）；个别字段解码失败 时从 CEN 修复。
+- **防御**：不信任 LOC 的 size。JVM 语义用扫描到下一个头确定数据边界（数据起点 在已知偏移排序集里的 ceiling，:ref:`algorithm-scan-ceiling`），再用 CEN 权威大小 重对齐、权威大小为 0 时强制空数据（:ref:`algorithm-adopt-cen`）；个别字段解码失败 时从 CEN 修复。
 - **对写回的影响**：模型里存的是 CEN 修正后的数据切片，直接回写即可；不要回写 LOC 的假 size。
 
 T04 LOC/CEN 不一致（crc / compression / 字段）
@@ -152,7 +152,7 @@ T04 LOC/CEN 不一致（crc / compression / 字段）
 
 - **特征**：LOC 的 CRC、压缩方法或任意字段与 CEN 不同，按 LOC 解必然出错。
 - **识别**：逐字段比较 LOC 与 CEN （``hasDifferentValuesThanCentralDirectoryHeader``）。
-- **防御**：**CEN 权威**——解析后让 LOC 采用 CEN 值 （``adoptLinkedCentralDirectoryValues``）；保留「LOC 与 CEN 是否不一致」的可查询 标记，供上层决定要不要警告/修复。
+- **防御**：**CEN 权威**，解析后让 LOC 采用 CEN 值 （``adoptLinkedCentralDirectoryValues``）；保留LOC 与 CEN 是否不一致的可查询 标记，供上层决定要不要警告/修复。
 - **对写回的影响**：CEN 覆盖后 LOC 字段已被修正，回写是自洽的。
 
 T05 Data Descriptor（bit 3）
@@ -167,9 +167,9 @@ T06 条目名攻击（尾斜杠 / 内嵌 NUL / 非 UTF-8）
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - **特征**：条目名以 ``/`` 结尾（看着像目录，内容却是文件）；名字里塞 NUL；或 非 UTF-8 字节。
-- **识别**：尾斜杠——``fileName`` 末尾是 ``/``，但条目有非空数据 / 是 ``.class`` 内容。NUL——``fileName`` 含 ``\0``，C 风格字符串会在该处截断，多个名字解压后 碰撞叠成一个文件。
-- **防御**：名字按 ``fileNameLength`` **显式截取**\ 存入 ``std::string``，NUL 原样 保留，不做 C 截断。尾斜杠条目原样承载；需要按名归类时用 mapper 规范化 （如 ``.class/`` → ``.class``）。按名判定类别时不能只靠「以 ``.class`` 结尾」 （尾斜杠、NUL 都能绕过），要以内容 magic 兜底。
-- **对写回的影响**：任何「名字以 ``/`` 结尾就当目录跳过数据」的回写逻辑都会**静默 丢数据**；必须区分「真目录」与「带数据的尾斜杠条目」。
+- **识别**：尾斜杠，``fileName`` 末尾是 ``/``，但条目有非空数据 / 是 ``.class`` 内容。NUL，``fileName`` 含 ``\0``，C 风格字符串会在该处截断，多个名字解压后 碰撞叠成一个文件。
+- **防御**：名字按 ``fileNameLength`` **显式截取**\ 存入 ``std::string``，NUL 原样 保留，不做 C 截断。尾斜杠条目原样承载；需要按名归类时用 mapper 规范化 （如 ``.class/`` → ``.class``）。按名判定类别时不能只靠以 ``.class`` 结尾 （尾斜杠、NUL 都能绕过），要以内容 magic 兜底。
+- **对写回的影响**：任何名字以 ``/`` 结尾就当目录跳过数据的回写逻辑都会**静默 丢数据**；必须区分真目录与带数据的尾斜杠条目。
 
 T07 CEN→LOC 映射异常（N-to-1 / 偏移越界）
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -298,7 +298,7 @@ libjzip 的 ``test_resource/`` 样本按 §3 分类挂载。测试在 ``test/ori
      - 验证链接受有效候选；尾斜杠条目原样保留
      - part_parse (EocdMisleading)
    * - ``hello-merged-fake-empty.jar``
-     - merged 后接一个「假装空」的 EOCD
+     - merged 后接一个假装空的 EOCD
      - 反向扫描跳过假 EOCD，取真实尾部
      - part_parse (MergedFakeEmpty, JvmCanRecoverData)
    * - ``deception.jar`` / ``hello-deceptive.jar``
@@ -319,7 +319,7 @@ libjzip 的 ``test_resource/`` 样本按 §3 分类挂载。测试在 ``test/ori
      - 覆盖测试
    * - ``hello-secret-0-length-locals.jar``
      - LOC 全零大小，CEN 正常
-     - ``JvmLocalFileHeader`` 「扫描到下一个头」确定边界 +
+     - ``JvmLocalFileHeader`` 扫描到下一个头确定边界 +
        ``adoptLinkedCentralDirectoryValues`` 用 CEN 覆盖
      - part_parse (Hello, LocalHeaderDetectMismatch) / mismatch
    * - ``hello-zeroed-locals.jar``
@@ -559,8 +559,8 @@ libjzip 的 ``test_resource/`` 样本按 §3 分类挂载。测试在 ``test/ori
 libjzip 负责承载容器结构，以下分类/判定若由消费方自己做，需配合 libjzip 的映射 能力：
 
 1. **按名字判定 class 别只用 ``.class`` 结尾**：尾斜杠条目（``Hello.class/``）在未过 ``JvmClassDirectoryMapper`` 时不满足 ``.class`` 结尾；内嵌 NUL 条目 （``a\u0000b.class``）同样会被名字检查漏掉。要按内容 magic（``0xCAFEBABE``） 兜底，或先跑 mapper 规范化。
-2. **写回别把尾斜杠条目当空目录**：任何按 ``entryName.back() == '/'`` 就跳过数据的 写逻辑都会**静默丢弃**「看着像目录、实际带 class 数据」的条目。libjzip 的 ``DirectZipWriter`` 不这么做；若消费方自行写回需自行保证。
-3. **NUL 形态在按名字过滤的统计里不可见**：``a\u0000b.class`` 结尾是 ``b.class``， 若先按 ``.class`` 结尾过滤整个条目会被滤掉，连「NUL 分类」都统计不到。应按内容 而非名字补可见性。
+2. **写回别把尾斜杠条目当空目录**：任何按 ``entryName.back() == '/'`` 就跳过数据的 写逻辑都会**静默丢弃**看着像目录、实际带 class 数据的条目。libjzip 的 ``DirectZipWriter`` 不这么做；若消费方自行写回需自行保证。
+3. **NUL 形态在按名字过滤的统计里不可见**：``a\u0000b.class`` 结尾是 ``b.class``， 若先按 ``.class`` 结尾过滤整个条目会被滤掉，连NUL 分类都统计不到。应按内容 而非名字补可见性。
 4. **EOCD 声称 0 条目不代表 jar 是空的**：解析必须走 ``JvmZipReader`` 这类带验证链 的 reader，不能直接信 EOCD 的条目数。
 5. **``resource-pack-trick-*`` 系列**：标准 reader 抛异常是预期行为；需要恢复时用 ``ForwardScanZipReader`` / ``NaiveLocalFileZipReader`` + 适当 allocator（如 ``LengthIgnoringAllocator``）。
 

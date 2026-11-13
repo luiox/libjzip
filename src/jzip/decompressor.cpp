@@ -18,7 +18,7 @@ constexpr usize kMaxExpansionFactor    = 1000;
 constexpr usize kMinExpansionQuota     = 1024ULL * 1024;
 
 // 共享解压循环：预分配与增长均受 opt-in 上限钳制（maxOutput == 0 表示不限制）。
-// 敌意 JAR 批量扫描场景下，头部声称的 uncompressedSize 不可信——负值会经
+// 敌意 JAR 批量扫描场景下，头部声称的 uncompressedSize 不可信，负值会经
 // usize 环绕变成天文数字预分配，虚高声明会直接 OOM；钳制后预分配最多到
 // 上限，实际产出一旦需要超出上限即抛 ZipParseException。
 // next_in/avail_in 由调用方设置；z_stream 生命周期亦由调用方管理。
@@ -166,7 +166,7 @@ std::vector<u8> UnsafeDeflateDecompressor::decompress(const LocalFileHeader& hea
     }
 
     if (entry) {
-        // Reuse pooled entry — reset stream state without inflateEnd/inflateInit
+        // Reuse pooled entry: reset stream state without inflateEnd/inflateInit
         inflateReset(static_cast<z_stream*>(entry->zs));
         try {
             auto& stream = *static_cast<z_stream*>(entry->zs);
@@ -188,7 +188,7 @@ std::vector<u8> UnsafeDeflateDecompressor::decompress(const LocalFileHeader& hea
         }
     }
 
-    // Pool exhausted — create a fresh stream
+    // Pool exhausted: create a fresh stream
     DeflateDecompressor fallback;
     fallback.setMaxOutputSize(maxOutput_);
     return fallback.decompress(header, compressedData);
